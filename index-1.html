@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rutetracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root {
+  --bg: #0f1117; --bg2: #161922; --bg3: #1e293b; --bg4: #0f0815;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b;
+  --blue: #2563eb; --blue2: #60a5fa; --blue3: #93c5fd; --bluebg: #1e3a5f;
+  --green: #16a34a; --greenbg: #0a2e1a; --red: #dc2626; --redbg: #7f1d1d;
+  --yellow: #f59e0b; --purple: #9333ea;
+  --radius: 12px; --radius-sm: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+button { cursor: pointer; border: none; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+.container { max-width: 700px; margin: 0 auto; padding: 0 16px 100px; }
+
+/* Header */
+.header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid var(--bg3); padding: 12px 16px; position: sticky; top: 0; z-index: 40; }
+.header-inner { max-width: 700px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 1.1rem; color: #f1f5f9; display: flex; align-items: center; gap: 8px; }
+.header h1 span { font-size: 1.2rem; }
+.header .ver { color: var(--text3); font-size: 0.8rem; }
+.auth-btn { padding: 6px 14px; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 600; color: #fff; }
+
+/* Nav */
+.nav { background: var(--bg2); border-bottom: 1px solid var(--bg3); padding: 4px 8px; position: sticky; top: 49px; z-index: 39; }
+.nav-inner { max-width: 700px; margin: 0 auto; display: flex; }
+.nav button { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: var(--radius-sm); background: transparent; color: var(--text3); font-size: 0.7rem; transition: all 0.2s; }
+.nav button.active { background: var(--bg3); color: var(--blue2); }
+.nav button svg { width: 18px; height: 18px; margin-bottom: 2px; }
+
+/* Cards */
+.card { background: var(--bg2); border: 1px solid var(--bg3); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.card-title { font-weight: 600; color: #f1f5f9; margin-bottom: 12px; }
+
+/* Inputs */
+.input { width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--bg3); background: var(--bg); color: var(--text); font-size: 0.9rem; }
+.input:focus { outline: none; border-color: var(--blue); }
+.input-sm { padding: 6px 8px; font-size: 0.85rem; }
+.label { color: var(--text2); font-size: 0.75rem; margin-bottom: 4px; display: block; }
+
+/* Buttons */
+.btn { padding: 12px 20px; border-radius: var(--radius-sm); font-weight: 600; font-size: 0.9rem; width: 100%; transition: all 0.2s; }
+.btn-green { background: var(--green); color: #fff; }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-red { background: var(--redbg); color: #fca5a5; }
+.btn-purple { background: var(--purple); color: #fff; }
+.btn:disabled { background: #374151; color: #666; cursor: not-allowed; }
+.btn-sm { padding: 8px 16px; font-size: 0.8rem; }
+
+/* Grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+.flex { display: flex; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+
+/* Route items */
+.route-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg); margin-bottom: 4px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+.route-item:hover { border-color: var(--bg3); }
+.route-item.selected { border-color: var(--blue); background: #0f1a2e; }
+
+/* Trip cards */
+.trip-card { border-radius: var(--radius); overflow: hidden; background: var(--bg2); border: 1px solid var(--bg3); margin-bottom: 8px; }
+.trip-card.all-reported { border-color: var(--green); }
+.trip-header { width: 100%; padding: 14px; text-align: left; display: flex; align-items: center; justify-content: space-between; background: transparent; color: var(--text); }
+.trip-detail { padding: 0 14px 14px; border-top: 1px solid var(--bg3); }
+
+/* Summary boxes */
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.summary-box { background: #f0f4ff; border: 1px solid #d0d8f0; border-radius: 6px; padding: 10px; text-align: center; }
+.summary-box .val { font-size: 20px; font-weight: bold; color: #1e3a5f; }
+.summary-box .lbl { font-size: 10px; color: #666; }
+
+/* Badge */
+.badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.badge-green { background: var(--green); color: #fff; }
+.badge-yellow { background: #92400e; color: #fbbf24; }
+
+/* Filter buttons */
+.filter-btn { padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.8rem; border: 1px solid var(--bg3); background: var(--bg); color: var(--text2); }
+.filter-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* Loading */
+.loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text3); }
+.spinner { width: 24px; height: 24px; border: 3px solid var(--bg3); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Message */
+.msg { padding: 8px 12px; border-radius: var(--radius-sm); text-align: center; font-size: 0.85rem; margin: 8px 0; }
+.msg-success { background: var(--greenbg); color: #34d399; }
+.msg-error { background: var(--redbg); color: #fca5a5; }
+
+/* Scrollable */
+.scroll-list { max-height: 400px; overflow-y: auto; }
+
+/* Report overlay */
+.report-overlay { position: fixed; inset: 0; z-index: 50; background: #fff; color: #1a1a1a; overflow-y: auto; }
+.report-toolbar { position: sticky; top: 0; z-index: 51; display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #1e293b; color: #fff; }
+.report-content { padding: 20px; max-width: 900px; margin: 0 auto; font-size: 12px; }
+
+/* Modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal { background: var(--bg3); border: 1px solid #374151; border-radius: var(--radius); padding: 24px; margin: 16px; max-width: 380px; width: 100%; }
+
+/* Print */
+@media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<!-- Google API -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const CONFIG = {
+  API_KEY: 'AIzaSyBIsuZBfbHY3Egj6TXgRWjnEuUL_xfmZzQ',
+  CLIENT_ID: '63213815271-0bie77eiqfs3j6na8m1iq3ek1hug66p9.apps.googleusercontent.com',
+  SHEET_ID: '1XBDnloUNP6PNmAxyxcytCYoQYv2rGXGpxct6H5tjHa8',
+  SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
+  ROUTES_SHEET: 'Rutedata',
+  TRIPS_SHEET: 'Kørsler',
+  VERSION: '4.0',
+};
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const state = {
+  view: 'new', // new, history, stats, data
+  routes: [],
+  trips: [],
+  selectedRoutes: [],
+  tripDate: new Date().toISOString().split('T')[0],
+  kmFromHome: '', kmToHome: '',
+  kmBetween: {}, comments: {},
+  routeSearch: '',
+  expandedTrip: null,
+  acubizFilter: 'all',
+  statsPeriod: 'ytd', statsFrom: '', statsTo: '',
+  showReport: false, showSkatExport: false,
+  deleteConfirm: null,
+  editRouteId: null,
+  showAddRoute: false,
+  newRoute: { postnr:'', rutenr:'', by:'', startAdresse:'', slutAdresse:'', husstande:'', km:'', tid:'', htfaKm:'', sathKm:'', isDepot: false },
+  msg: null,
+  loading: false,
+  authed: false,
+  tokenClient: null,
+  accessToken: null,
+};
+
+// ═══════════════════════════════════════════════════════════
+// GOOGLE SHEETS API
+// ═══════════════════════════════════════════════════════════
+async function sheetsGet(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(range)}?key=${CONFIG.API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Sheets GET error: ${res.status}`);
+  return (await res.json()).values || [];
+}
+
+async function sheetsUpdate(range, values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ range, values }),
+  });
+  if (!res.ok) throw new Error(`Sheets PUT error: ${res.status}`);
+  return res.json();
+}
+
+async function sheetsAppend(range, values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ range, values }),
+  });
+  if (!res.ok) throw new Error(`Sheets APPEND error: ${res.status}`);
+  return res.json();
+}
+
+async function ensureTripsSheet() {
+  // Check if Kørsler sheet exists, create if not
+  try {
+    await sheetsGet(`${CONFIG.TRIPS_SHEET}!A1`);
+  } catch (e) {
+    // Sheet doesn't exist, create it
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}:batchUpdate`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: CONFIG.TRIPS_SHEET } } }]
+      }),
+    });
+    // Add headers
+    await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A1:O1`, [[
+      'ID', 'Dato', 'Ruter_JSON', 'KmFraHjem', 'KmTilHjem', 'KmMellem_JSON',
+      'Kommentarer_JSON', 'AcubizRuter_JSON', 'TotalRouteKm', 'TotalTransportKm',
+      'TotalHusstande', 'TotalTidMin', 'Oprettet', 'Opdateret'
+    ]]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════════
+async function loadRoutes() {
+  try {
+    const rows = await sheetsGet(`${CONFIG.ROUTES_SHEET}!A1:Z`);
+    if (rows.length < 2) return;
+    
+    const headers = rows[0].map(h => h.toLowerCase().replace(/[\s.()]/g, ''));
+    const colIdx = {};
+    headers.forEach((h, i) => colIdx[h] = i);
+    
+    state.routes = rows.slice(1).filter(r => r.length > 1 && r[colIdx['postnr']]).map(row => {
+      const get = (key) => row[colIdx[key]] || '';
+      const postnr = get('postnr').toString().trim();
+      const rutenr = get('rutenr').toString().trim();
+      const by = get('byellerland') || get('by') || '';
+      const isDepot = by.toLowerCase() === 'depot' || rutenr.toLowerCase().includes('depot');
+      const meters = parseFloat((get('rutelængdemeter') || '0').replace(',', '.')) || 0;
+      const km = meters > 0 ? meters / 1000 : (parseFloat((get('km') || '0').replace(',', '.')) || 0);
+      const tidStr = get('omdelingstidmin') || get('tid') || '';
+      const tidMin = parseInt(tidStr) || 0;
+      const tid = tidMin > 0 ? `${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}` : '';
+      const htfaKm = parseFloat((get('htfakm') || '0').replace(',', '.')) || 0;
+      const sathKm = parseFloat((get('sathkm') || '0').replace(',', '.')) || 0;
+
+      return {
+        id: `${postnr}-${rutenr}`,
+        postnr, rutenr, by,
+        startAdresse: get('startadresse'),
+        slutAdresse: get('slutadresse'),
+        husstande: parseInt(get('antalhusstande') || get('husstande') || '0') || 0,
+        aviser: parseInt(get('antalaviser') || '0') || 0,
+        km, tid, tidMin, htfaKm, sathKm,
+        type: isDepot ? 'depot' : 'rute',
+      };
+    }).sort((a, b) => a.id.localeCompare(b.id));
+    
+    showMsg(`✅ ${state.routes.length} ruter indlæst`, 'success');
+  } catch (e) {
+    showMsg('❌ Kunne ikke indlæse ruter: ' + e.message, 'error');
+  }
+}
+
+async function loadTrips() {
+  try {
+    const rows = await sheetsGet(`${CONFIG.TRIPS_SHEET}!A2:N`);
+    state.trips = rows.filter(r => r.length > 1).map(row => {
+      const parseJ = (s) => { try { return JSON.parse(s || '{}'); } catch { return {}; } };
+      const parseA = (s) => { try { return JSON.parse(s || '[]'); } catch { return []; } };
+      return {
+        id: row[0] || Date.now().toString(),
+        date: row[1] || '',
+        routes: parseA(row[2]),
+        kmFromHome: parseFloat(row[3]) || 0,
+        kmToHome: parseFloat(row[4]) || 0,
+        kmBetween: parseJ(row[5]),
+        comments: parseJ(row[6]),
+        acubizRoutes: parseJ(row[7]),
+        totalRouteKm: parseFloat(row[8]) || 0,
+        totalTransportKm: parseFloat(row[9]) || 0,
+        totalHusstande: parseInt(row[10]) || 0,
+        totalTidMin: parseInt(row[11]) || 0,
+      };
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  } catch (e) {
+    // Trips sheet may not exist yet
+    state.trips = [];
+  }
+}
+
+function tripToRow(t) {
+  return [
+    t.id, t.date, JSON.stringify(t.routes),
+    t.kmFromHome, t.kmToHome,
+    JSON.stringify(t.kmBetween), JSON.stringify(t.comments),
+    JSON.stringify(t.acubizRoutes || {}),
+    t.totalRouteKm, t.totalTransportKm, t.totalHusstande,
+    t.routes.reduce((s, r) => s + (r.tidMin || 0), 0),
+    t.createdAt || new Date().toISOString(),
+    new Date().toISOString(),
+  ];
+}
+
+async function saveAllTrips() {
+  if (!state.accessToken) { showMsg('⚠️ Log ind for at gemme', 'error'); return; }
+  try {
+    await ensureTripsSheet();
+    if (state.trips.length === 0) {
+      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:N2`, [['', '', '', '', '', '', '', '', '', '', '', '', '', '']]);
+    } else {
+      const values = state.trips.map(tripToRow);
+      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:N${values.length + 1}`, values);
+    }
+  } catch (e) {
+    showMsg('❌ Gemme-fejl: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
+function initAuth() {
+  if (typeof google === 'undefined') {
+    setTimeout(initAuth, 500);
+    return;
+  }
+  state.tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPES,
+    callback: async (resp) => {
+      if (resp.error) {
+        showMsg('❌ Login fejlede', 'error');
+        return;
+      }
+      state.accessToken = resp.access_token;
+      state.authed = true;
+      showMsg('✅ Logget ind!', 'success');
+      await ensureTripsSheet();
+      await loadTrips();
+      render();
+    },
+  });
+}
+
+function doLogin() {
+  if (state.tokenClient) {
+    state.tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function fmtNum(v) { return (v || 0).toFixed(1).replace('.', ','); }
+function fmtDate(d) {
+  try {
+    const dt = new Date(d + 'T00:00:00');
+    const days = ['Søn','Man','Tir','Ons','Tor','Fre','Lør'];
+    const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+    return `${days[dt.getDay()]} ${dt.getDate()}. ${months[dt.getMonth()]}`;
+  } catch { return d; }
+}
+function showMsg(text, type='success') {
+  state.msg = { text, type };
+  render();
+  setTimeout(() => { state.msg = null; render(); }, 4000);
+}
+
+function getFilteredTrips() {
+  const now = new Date();
+  const y = now.getFullYear();
+  return state.trips.filter(t => {
+    const d = t.date;
+    if (state.statsPeriod === 'ytd') return d >= `${y}-01-01`;
+    if (state.statsPeriod === 'lastYear') return d >= `${y-1}-01-01` && d <= `${y-1}-12-31`;
+    if (state.statsPeriod === 'thisMonth') { const m = String(now.getMonth()+1).padStart(2,'0'); return d >= `${y}-${m}-01`; }
+    if (state.statsPeriod === 'lastMonth') { const lm = new Date(y, now.getMonth()-1, 1); const m = String(lm.getMonth()+1).padStart(2,'0'); const ly = lm.getFullYear(); return d >= `${ly}-${m}-01` && d < `${y}-${String(now.getMonth()+1).padStart(2,'0')}-01`; }
+    if (state.statsPeriod === 'custom') return (!state.statsFrom || d >= state.statsFrom) && (!state.statsTo || d <= state.statsTo);
+    return true;
+  });
+}
+
+function findRoute(tripRoute) {
+  const routeMap = {};
+  state.routes.forEach(r => routeMap[r.id] = r);
+  if (routeMap[tripRoute.id]) return routeMap[tripRoute.id];
+  return state.routes.find(r =>
+    r.postnr === tripRoute.postnr && (
+      r.rutenr.startsWith(tripRoute.rutenr) ||
+      tripRoute.rutenr.startsWith(r.rutenr) ||
+      r.rutenr.toLowerCase().includes(tripRoute.rutenr.toLowerCase()) ||
+      tripRoute.rutenr.toLowerCase().includes(r.rutenr.toLowerCase())
+    )
+  ) || null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SVG ICONS
+// ═══════════════════════════════════════════════════════════
+const icons = {
+  truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+  chevDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
+  chevUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+};
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    ${renderHeader()}
+    ${renderNav()}
+    <div class="container" style="padding-top:12px">
+      ${state.msg ? `<div class="msg msg-${state.msg.type}">${state.msg.text}</div>` : ''}
+      ${state.loading ? '<div class="loading"><div class="spinner"></div>Indlæser...</div>' : ''}
+      ${state.view === 'new' ? renderNewTrip() : ''}
+      ${state.view === 'history' ? renderHistory() : ''}
+      ${state.view === 'stats' ? renderStats() : ''}
+      ${state.view === 'data' ? renderData() : ''}
+    </div>
+    ${state.showReport ? renderReport() : ''}
+    ${state.deleteConfirm ? renderDeleteModal() : ''}
+  `;
+  attachEvents();
+}
+
+function renderHeader() {
+  return `<div class="header"><div class="header-inner">
+    <h1><span>🚛</span> Rutetracker</h1>
+    <div class="flex gap-2" style="align-items:center">
+      <span class="ver">v${CONFIG.VERSION} · ${state.routes.length} ruter</span>
+      ${state.authed
+        ? '<button class="auth-btn" style="background:var(--green)" onclick="showMsg(\'Allerede logget ind\',\'success\')">✅ Online</button>'
+        : '<button class="auth-btn" style="background:var(--blue)" onclick="doLogin()">🔑 Log ind</button>'}
+    </div>
+  </div></div>`;
+}
+
+function renderNav() {
+  const items = [
+    { id: 'new', icon: icons.plus, label: 'Ny kørsel' },
+    { id: 'history', icon: icons.list, label: 'Historik' },
+    { id: 'stats', icon: icons.chart, label: 'Statistik' },
+    { id: 'data', icon: icons.upload, label: 'Data' },
+  ];
+  return `<div class="nav"><div class="nav-inner">
+    ${items.map(i => `<button class="${state.view === i.id ? 'active' : ''}" onclick="state.view='${i.id}';render()">
+      ${i.icon}<span>${i.label}</span>
+    </button>`).join('')}
+  </div></div>`;
+}
+
+// ─── NEW TRIP ──────────────────────────────────────────
+function renderNewTrip() {
+  const routeMap = {};
+  state.routes.forEach(r => routeMap[r.id] = r);
+  const search = state.routeSearch.toLowerCase();
+  const filtered = state.routes.filter(r =>
+    !state.selectedRoutes.find(s => s.id === r.id) &&
+    (r.id.toLowerCase().includes(search) || r.by.toLowerCase().includes(search) ||
+     r.startAdresse.toLowerCase().includes(search) || r.postnr.includes(search))
+  );
+  const existsOnDate = state.trips.some(t => t.date === state.tripDate);
+
+  return `
+    <div class="card">
+      <div class="card-title">📅 Dato</div>
+      <input type="date" class="input" value="${state.tripDate}" onchange="state.tripDate=this.value;render()">
+    </div>
+    
+    <div class="card">
+      <div class="card-title">🔍 Vælg ruter</div>
+      <div style="position:relative;margin-bottom:12px">
+        <input class="input" placeholder="Søg ruter..." value="${state.routeSearch}" oninput="state.routeSearch=this.value;render()">
+      </div>
+      <div class="scroll-list" style="max-height:250px">
+        ${filtered.map(r => `
+          <div class="route-item" onclick="addRoute('${r.id}')">
+            <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
+            <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    ${state.selectedRoutes.length > 0 ? `
+      <div class="card">
+        <div class="card-title">📋 Valgte ruter (${state.selectedRoutes.length})</div>
+        ${state.selectedRoutes.map((r, i) => `
+          <div style="margin-bottom:8px">
+            <div class="route-item selected">
+              <div class="flex gap-2" style="align-items:center">
+                <div style="display:flex;flex-direction:column;min-width:20px">
+                  <button onclick="moveRoute(${i},-1)" style="color:${i===0?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px">▲</button>
+                  <button onclick="moveRoute(${i},1)" style="color:${i===state.selectedRoutes.length-1?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px">▼</button>
+                </div>
+                <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
+              </div>
+              <div class="flex gap-2" style="align-items:center">
+                <span style="color:var(--text3);font-size:0.8rem">${fmtNum(r.km)} km</span>
+                <button onclick="removeRoute(${i})" style="color:#f87171;background:none;padding:4px">${icons.x}</button>
+              </div>
+            </div>
+            ${i === 0 ? `
+              <div style="padding:4px 8px;display:flex;align-items:center;gap:8px">
+                <span style="color:var(--text3);font-size:0.8rem">🏠→</span>
+                <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmFromHome}" oninput="state.kmFromHome=this.value">
+                <span style="color:var(--text3);font-size:0.75rem">km fra hjem</span>
+              </div>
+            ` : `
+              <div style="padding:4px 8px;display:flex;align-items:center;gap:8px">
+                <span style="color:var(--text3);font-size:0.8rem">↕</span>
+                <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmBetween[r.id]||''}" oninput="state.kmBetween['${r.id}']=this.value">
+                <span style="color:var(--text3);font-size:0.75rem">km mellem ruter</span>
+              </div>
+            `}
+            ${i === state.selectedRoutes.length - 1 ? `
+              <div style="padding:4px 8px;display:flex;align-items:center;gap:8px">
+                <span style="color:var(--text3);font-size:0.8rem">→🏠</span>
+                <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmToHome}" oninput="state.kmToHome=this.value">
+                <span style="color:var(--text3);font-size:0.75rem">km til hjem</span>
+              </div>
+            ` : ''}
+            <div style="padding:4px 8px">
+              <input class="input input-sm" placeholder="Kommentar (valgfri)..." value="${state.comments[r.id]||''}" oninput="state.comments['${r.id}']=this.value">
+            </div>
+          </div>
+        `).join('')}
+        
+        <button class="btn ${existsOnDate ? 'btn-blue' : 'btn-green'}" style="margin-top:12px" onclick="saveTrip()">
+          ${existsOnDate ? '➕ Tilføj til eksisterende kørsel' : '✅ Gem kørsel'}
+        </button>
+      </div>
+    ` : ''}
+  `;
+}
+
+// ─── HISTORY ───────────────────────────────────────────
+function renderHistory() {
+  if (state.trips.length === 0) {
+    return `<div style="text-align:center;padding:40px;color:var(--text3)">
+      <p style="font-size:2rem;margin-bottom:8px">📋</p>
+      <p>Ingen kørsler endnu</p>
+      <button class="btn btn-blue btn-sm" style="margin-top:12px;width:auto;display:inline-block" onclick="state.view='new';render()">Opret første kørsel</button>
+    </div>`;
+  }
+  
+  const filteredTrips = state.trips.filter(t => {
+    const allDone = t.routes.length > 0 && t.routes.every(r => t.acubizRoutes?.[r.id]);
+    if (state.acubizFilter === 'all') return true;
+    if (state.acubizFilter === 'done') return allDone;
+    return !allDone;
+  });
+  
+  const pendingCount = state.trips.filter(t => !t.routes.every(r => t.acubizRoutes?.[r.id])).length;
+  
+  return `
+    <div class="flex gap-2" style="margin-bottom:12px">
+      ${['all','pending','done'].map(f => {
+        const labels = { all: 'Alle', pending: '☐ Mangler', done: '✅ Indberettet' };
+        return `<button class="filter-btn ${state.acubizFilter===f?'active':''}" onclick="state.acubizFilter='${f}';render()">
+          ${labels[f]}${f==='pending'?` <span style="color:var(--yellow)">(${pendingCount})</span>`:''}
+        </button>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
+      <button class="btn-sm" style="background:var(--blue);color:#fff;border-radius:var(--radius-sm);font-size:0.75rem;padding:6px 10px" onclick="recalcAll()">🔄 Genberegn</button>
+      <button class="btn-sm" style="background:var(--redbg);color:#fca5a5;border-radius:var(--radius-sm);font-size:0.75rem;padding:6px 10px" onclick="state.deleteConfirm='all';render()">🗑️ Slet alle</button>
+    </div>
+    ${filteredTrips.map(trip => {
+      const isExp = state.expandedTrip === trip.id;
+      const allDone = trip.routes.length > 0 && trip.routes.every(r => trip.acubizRoutes?.[r.id]);
+      const doneCount = trip.routes.filter(r => trip.acubizRoutes?.[r.id]).length;
+      const tidMin = trip.routes.reduce((s, r) => s + (r.tidMin || 0), 0);
+      
+      return `<div class="trip-card ${allDone ? 'all-reported' : ''}">
+        <button class="trip-header" onclick="state.expandedTrip=state.expandedTrip==='${trip.id}'?null:'${trip.id}';render()">
+          <div>
+            <div class="flex gap-2" style="align-items:center">
+              <span style="font-weight:600;color:#f1f5f9">${fmtDate(trip.date)}</span>
+              ${allDone ? '<span class="badge badge-green">Acubiz ✓</span>' : doneCount > 0 ? `<span class="badge badge-yellow">${doneCount}/${trip.routes.length}</span>` : ''}
+            </div>
+            <div style="color:var(--text3);font-size:0.8rem;margin-top:4px">
+              ${trip.routes.length} ruter · ${trip.routes.map(r=>r.postnr+'-'+r.rutenr).join(', ')}
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--blue2);font-weight:700">${fmtNum(trip.totalTransportKm)} km</div>
+            <div style="color:var(--text3);font-size:0.75rem">${fmtNum(trip.totalRouteKm)} rute</div>
+            ${tidMin > 0 ? `<div style="color:var(--text3);font-size:0.75rem">${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}</div>` : ''}
+          </div>
+        </button>
+        ${isExp ? renderTripDetail(trip) : ''}
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function renderTripDetail(trip) {
+  return `<div class="trip-detail">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0">
+      ${[{l:'Rute-km',v:fmtNum(trip.totalRouteKm)},{l:'Transport',v:fmtNum(trip.totalTransportKm)},{l:'Total',v:fmtNum(trip.totalRouteKm+trip.totalTransportKm)},
+        {l:'Husstande',v:trip.totalHusstande},{l:'Fra hjem',v:fmtNum(trip.kmFromHome)},{l:'Til hjem',v:fmtNum(trip.kmToHome)}
+      ].map(c=>`<div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:0.75rem;color:var(--text3)">${c.l}</div>
+        <div style="font-weight:700;color:var(--blue3)">${c.v}</div>
+      </div>`).join('')}
+    </div>
+    
+    <div style="margin:12px 0">
+      ${trip.routes.map((r, i) => {
+        const isReported = trip.acubizRoutes?.[r.id];
+        return `<div class="flex gap-1" style="align-items:center;margin-bottom:4px">
+          <div style="display:flex;flex-direction:column;min-width:20px">
+            <button onclick="moveTripRoute('${trip.id}',${i},-1)" style="color:${i===0?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px;cursor:pointer;border:none">▲</button>
+            <button onclick="moveTripRoute('${trip.id}',${i},1)" style="color:${i===trip.routes.length-1?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px;cursor:pointer;border:none">▼</button>
+          </div>
+          <div onclick="toggleAcubiz('${trip.id}','${r.id}')" 
+            style="flex:1;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;
+            background:${isReported?'var(--greenbg)':'var(--bg)'};border:1px solid ${isReported?'rgba(22,163,74,0.3)':'transparent'};font-size:0.8rem">
+            <span style="display:flex;align-items:center;gap:8px;color:var(--text)">
+              <span style="font-size:1rem">${isReported?'✅':'☐'}</span>
+              ${r.type==='depot'?'🏢':'📬'} ${r.postnr}-${r.rutenr}
+            </span>
+            <span style="color:var(--text2)">${r.husstande} hus · ${fmtNum(r.km)} km${r.tid?' · '+r.tid:''}</span>
+          </div>
+          <button onclick="state.deleteConfirm='route:${trip.id}:${r.id}';render()" style="color:#f87171;background:none;border:none;padding:4px;cursor:pointer;width:20px">${icons.x}</button>
+        </div>`;
+      }).join('')}
+      <p style="color:var(--text3);font-size:0.7rem;text-align:center;margin-top:6px">Tryk rute for Acubiz · ▲▼ for at flytte</p>
+    </div>
+    
+    <button onclick="toggleAllAcubiz('${trip.id}')" class="btn btn-sm" style="background:${trip.routes.every(r=>trip.acubizRoutes?.[r.id])?'var(--green)':'var(--bluebg)'};color:${trip.routes.every(r=>trip.acubizRoutes?.[r.id])?'#fff':'var(--blue3)'};margin-bottom:8px">
+      ${trip.routes.every(r=>trip.acubizRoutes?.[r.id]) ? '✅ Alle indberettet — tryk for at fjerne' : '☐ Markér alle som indberettet'}
+    </button>
+    <button onclick="state.deleteConfirm='${trip.id}';render()" class="btn btn-sm btn-red">🗑️ Slet denne kørsel</button>
+  </div>`;
+}
+
+// ─── STATS ─────────────────────────────────────────────
+function renderStats() {
+  const filtered = getFilteredTrips();
+  const totals = filtered.reduce((a, t) => ({
+    trips: a.trips+1, routes: a.routes+t.routes.length, husstande: a.husstande+t.totalHusstande,
+    routeKm: a.routeKm+t.totalRouteKm, transportKm: a.transportKm+t.totalTransportKm,
+    fromHome: a.fromHome+t.kmFromHome, toHome: a.toHome+t.kmToHome,
+    between: a.between+Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0),
+    tidMin: a.tidMin+t.routes.reduce((s,r)=>s+(r.tidMin||0),0),
+  }), {trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,fromHome:0,toHome:0,between:0,tidMin:0});
+
+  return `
+    <div class="card">
+      <div class="card-title">📊 Periode</div>
+      <div class="flex gap-2" style="flex-wrap:wrap;margin-bottom:12px">
+        ${['ytd','lastYear','thisMonth','lastMonth','custom'].map(p => {
+          const labels = {ytd:'År til dato',lastYear:'Sidste år',thisMonth:'Denne md.',lastMonth:'Sidste md.',custom:'Vælg...'};
+          return `<button class="filter-btn ${state.statsPeriod===p?'active':''}" onclick="state.statsPeriod='${p}';render()">${labels[p]}</button>`;
+        }).join('')}
+      </div>
+      ${state.statsPeriod === 'custom' ? `<div class="grid-2" style="margin-bottom:12px">
+        <input type="date" class="input input-sm" value="${state.statsFrom}" onchange="state.statsFrom=this.value;render()">
+        <input type="date" class="input input-sm" value="${state.statsTo}" onchange="state.statsTo=this.value;render()">
+      </div>` : ''}
+    </div>
+    
+    <div class="card">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+        ${[{v:totals.trips,l:'Kørsler'},{v:totals.routes,l:'Ruter'},{v:totals.husstande,l:'Husstande'},
+          {v:fmtNum(totals.routeKm),l:'Rute-km'},{v:fmtNum(totals.transportKm),l:'Transport-km'},{v:fmtNum(totals.routeKm+totals.transportKm),l:'Total km'},
+          ...(totals.tidMin>0?[{v:`${Math.floor(totals.tidMin/60)}:${String(totals.tidMin%60).padStart(2,'0')}`,l:'Omdelingstid'}]:[])
+        ].map(c=>`<div style="background:var(--bg);border:1px solid var(--bg3);border-radius:6px;padding:10px;text-align:center">
+          <div style="font-size:1.2rem;font-weight:700;color:var(--blue2)">${c.v}</div>
+          <div style="font-size:0.7rem;color:var(--text3)">${c.l}</div>
+        </div>`).join('')}
+      </div>
+      
+      <div class="flex gap-2">
+        <button class="btn btn-sm btn-blue" style="flex:1" onclick="state.showReport=true;render()">📄 Rapport</button>
+        <button class="btn btn-sm btn-purple" style="flex:1" onclick="generateSkatPDF()">🏛️ Skat PDF</button>
+      </div>
+    </div>
+  `;
+}
+
+// ─── DATA ──────────────────────────────────────────────
+function renderData() {
+  return `
+    <div class="card">
+      <div class="card-title">📡 Data fra Google Sheets</div>
+      <p style="color:var(--text2);font-size:0.85rem;margin-bottom:12px">Ruter indlæses fra dit Google Sheet. Kørsler gemmes automatisk.</p>
+      <button class="btn btn-blue btn-sm" onclick="reloadData()" style="margin-bottom:8px">🔄 Genindlæs ruter fra Sheet</button>
+      ${!state.authed ? '<p style="color:var(--yellow);font-size:0.8rem;margin-top:8px">⚠️ Log ind for at kunne gemme kørsler</p>' : ''}
+    </div>
+    
+    ${state.routes.length > 0 ? `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="card-title" style="margin-bottom:0">Ruter (${state.routes.length})</span>
+        </div>
+        <div class="scroll-list">
+          ${state.routes.map(r => `
+            <div style="background:var(--bg);border-radius:var(--radius-sm);margin-bottom:4px">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:pointer" onclick="state.editRouteId=state.editRouteId==='${r.id}'?null:'${r.id}';render()">
+                <span style="color:var(--text2);font-size:0.85rem">
+                  ${r.type==='depot'?'🏢':'📬'} ${r.postnr}-${r.rutenr}
+                  ${(!r.htfaKm&&!r.sathKm)?'<span style="color:var(--yellow);font-size:0.7rem"> ⚠️ km</span>':''}
+                </span>
+                <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km ${state.editRouteId===r.id?'▲':'✏️'}</span>
+              </div>
+              ${state.editRouteId===r.id ? renderRouteEdit(r) : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    <div class="card">
+      <button style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;color:var(--text)" onclick="state.showAddRoute=!state.showAddRoute;render()">
+        <span class="card-title" style="margin-bottom:0">➕ Opret ny rute</span>
+        <span style="color:var(--text3)">${state.showAddRoute?'▲':'▼'}</span>
+      </button>
+      ${state.showAddRoute ? renderAddRoute() : ''}
+    </div>
+  `;
+}
+
+function renderRouteEdit(r) {
+  return `<div style="padding:8px 12px;border-top:1px solid var(--bg3)">
+    <div class="grid-4" style="margin-bottom:8px">
+      <div><span class="label">Husstande</span><input class="input input-sm" value="${r.husstande}" onblur="updateRoute('${r.id}','husstande',parseInt(this.value)||0)"></div>
+      <div><span class="label">Km</span><input class="input input-sm" value="${r.km}" onblur="updateRoute('${r.id}','km',parseFloat(this.value.replace(',','.'))||0)"></div>
+      <div><span class="label">HTFA km</span><input class="input input-sm" value="${r.htfaKm||''}" placeholder="Fra hjem" onblur="updateRoute('${r.id}','htfaKm',parseFloat(this.value.replace(',','.'))||0)"></div>
+      <div><span class="label">SATH km</span><input class="input input-sm" value="${r.sathKm||''}" placeholder="Til hjem" onblur="updateRoute('${r.id}','sathKm',parseFloat(this.value.replace(',','.'))||0)"></div>
+    </div>
+  </div>`;
+}
+
+function renderAddRoute() {
+  const nr = state.newRoute;
+  return `<div style="margin-top:12px">
+    <div class="grid-2" style="margin-bottom:8px">
+      <div><span class="label">Postnr. *</span><input class="input input-sm" value="${nr.postnr}" oninput="state.newRoute.postnr=this.value" placeholder="4793"></div>
+      <div><span class="label">Rutenr. *</span><input class="input input-sm" value="${nr.rutenr}" oninput="state.newRoute.rutenr=this.value" placeholder="Bogø depot"></div>
+    </div>
+    <div class="grid-3" style="margin-bottom:8px">
+      <div><span class="label">Husstande</span><input class="input input-sm" value="${nr.husstande}" oninput="state.newRoute.husstande=this.value" type="number"></div>
+      <div><span class="label">Km</span><input class="input input-sm" value="${nr.km}" oninput="state.newRoute.km=this.value" placeholder="8,5"></div>
+      <div><span class="label">Tid (min)</span><input class="input input-sm" value="${nr.tid}" oninput="state.newRoute.tid=this.value" type="number"></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:8px">
+      <div><span class="label">HTFA km</span><input class="input input-sm" value="${nr.htfaKm}" oninput="state.newRoute.htfaKm=this.value" placeholder="Fra hjem"></div>
+      <div><span class="label">SATH km</span><input class="input input-sm" value="${nr.sathKm}" oninput="state.newRoute.sathKm=this.value" placeholder="Til hjem"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--text2);font-size:0.85rem">
+      <input type="checkbox" ${nr.isDepot?'checked':''} onchange="state.newRoute.isDepot=this.checked"> 🏢 Depot-rute
+    </label>
+    <button class="btn btn-green btn-sm" onclick="createRoute()">✅ Opret rute</button>
+  </div>`;
+}
+
+// ─── REPORT ────────────────────────────────────────────
+function renderReport() {
+  const filtered = getFilteredTrips();
+  const totals = filtered.reduce((a,t)=>({
+    trips:a.trips+1,routes:a.routes+t.routes.length,husstande:a.husstande+t.totalHusstande,
+    routeKm:a.routeKm+t.totalRouteKm,transportKm:a.transportKm+t.totalTransportKm,
+    tidMin:a.tidMin+t.routes.reduce((s,r)=>s+(r.tidMin||0),0),
+    fromHome:a.fromHome+t.kmFromHome,toHome:a.toHome+t.kmToHome,
+    between:a.between+Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0),
+  }),{trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,tidMin:0,fromHome:0,toHome:0,between:0});
+  const periodLabel = {ytd:`År til dato ${new Date().getFullYear()}`,lastYear:`${new Date().getFullYear()-1}`,thisMonth:'Denne måned',lastMonth:'Sidste måned',custom:`${state.statsFrom} til ${state.statsTo}`}[state.statsPeriod]||'';
+  const tidStr = totals.tidMin>0?`${Math.floor(totals.tidMin/60)}:${String(totals.tidMin%60).padStart(2,'0')}`:'';
+
+  return `<div class="report-overlay">
+    <div class="report-toolbar no-print">
+      <span style="font-weight:700;font-size:0.9rem">📄 ${periodLabel}</span>
+      <button onclick="state.showReport=false;render()" style="background:var(--red);color:#fff;padding:6px 16px;border-radius:6px;font-weight:700">✕ Luk</button>
+    </div>
+    <div class="report-content">
+      <h1 style="font-size:20px;margin-bottom:4px">Kørselsregnskab</h1>
+      <p style="color:#666;font-size:13px">${periodLabel}</p>
+      <p style="color:#999;font-size:11px;margin-bottom:16px">Udskrevet: ${new Date().toLocaleDateString('da-DK')} — Rutetracker</p>
+      <div class="summary-grid">
+        ${[{v:totals.trips,l:'Kørsler'},{v:totals.routes,l:'Ruter kørt'},{v:totals.husstande,l:'Husstande'},
+          {v:fmtNum(totals.routeKm),l:'Rute-km'},{v:fmtNum(totals.transportKm),l:'Transport-km'},{v:fmtNum(totals.routeKm+totals.transportKm),l:'Total km'},
+          ...(tidStr?[{v:tidStr,l:'Omdelingstid'}]:[])
+        ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
+      </div>
+      <h2 style="font-size:15px;border-bottom:2px solid #2563eb;padding-bottom:4px;margin-bottom:10px">Oversigt</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:24px">
+        <thead><tr style="background:#1e293b;color:#fff">
+          ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Tid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
+        </tr></thead><tbody>
+          ${filtered.map((t,i)=>{
+            const tMin=t.routes.reduce((s,r)=>s+(r.tidMin||0),0);
+            return `<tr style="background:${i%2?'#f8f9fa':'#fff'}">
+              <td style="padding:5px 6px">${fmtDate(t.date)}</td>
+              <td style="padding:5px 6px;text-align:right">${t.routes.length}</td>
+              <td style="padding:5px 6px;font-size:10px">${t.routes.map(r=>r.postnr+'-'+r.rutenr).join(', ')}</td>
+              <td style="padding:5px 6px;text-align:right">${t.totalHusstande}</td>
+              <td style="padding:5px 6px;text-align:right">${fmtNum(t.totalRouteKm)}</td>
+              <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmFromHome)}</td>
+              <td style="padding:5px 6px;text-align:right">${fmtNum(Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0))}</td>
+              <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmToHome)}</td>
+              <td style="padding:5px 6px;text-align:right;font-weight:bold">${fmtNum(t.totalTransportKm)}</td>
+              <td style="padding:5px 6px;text-align:right">${tMin>0?Math.floor(tMin/60)+':'+String(tMin%60).padStart(2,'0'):'-'}</td>
+            </tr>`}).join('')}
+          <tr style="font-weight:bold;background:#e8f0fe;border-top:2px solid #2563eb">
+            <td style="padding:6px">TOTAL</td><td style="padding:6px;text-align:right">${totals.routes}</td>
+            <td style="padding:6px">${totals.trips} kørsler</td><td style="padding:6px;text-align:right">${totals.husstande}</td>
+            <td style="padding:6px;text-align:right">${fmtNum(totals.routeKm)}</td><td style="padding:6px;text-align:right">${fmtNum(totals.fromHome)}</td>
+            <td style="padding:6px;text-align:right">${fmtNum(totals.between)}</td><td style="padding:6px;text-align:right">${fmtNum(totals.toHome)}</td>
+            <td style="padding:6px;text-align:right">${fmtNum(totals.transportKm)}</td>
+            <td style="padding:6px;text-align:right">${tidStr||'-'}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ─── DELETE MODAL ──────────────────────────────────────
+function renderDeleteModal() {
+  const isAll = state.deleteConfirm === 'all';
+  const isRoute = state.deleteConfirm?.startsWith('route:');
+  return `<div class="modal-bg">
+    <div class="modal">
+      <h3 style="color:#f1f5f9;font-size:1.1rem;margin-bottom:12px">⚠️ ${isAll?'Slet alle kørsler?':isRoute?'Slet denne rute?':'Slet denne kørsel?'}</h3>
+      <p style="color:var(--text2);font-size:0.9rem;margin-bottom:16px">${isAll?'Alle kørsler slettes permanent.':isRoute?'Ruten fjernes fra kørslen.':'Kørslen slettes permanent.'}</p>
+      <div class="flex gap-2">
+        <button class="btn btn-sm" style="background:var(--red);color:#fff;flex:1" onclick="confirmDelete()">Ja, slet</button>
+        <button class="btn btn-sm" style="background:#374151;color:var(--text);flex:1" onclick="state.deleteConfirm=null;render()">Annuller</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════
+function addRoute(id) {
+  const r = state.routes.find(x => x.id === id);
+  if (!r || state.selectedRoutes.find(x => x.id === id)) return;
+  state.selectedRoutes.push({...r});
+  
+  // Auto-fill km from/to home
+  if (state.selectedRoutes.length === 1 && r.htfaKm) {
+    state.kmFromHome = String(r.htfaKm).replace('.', ',');
+  }
+  const last = state.selectedRoutes[state.selectedRoutes.length - 1];
+  if (last.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
+  
+  state.routeSearch = '';
+  render();
+}
+
+function removeRoute(idx) {
+  state.selectedRoutes.splice(idx, 1);
+  // Recalc from/to
+  if (state.selectedRoutes.length > 0) {
+    const first = state.routes.find(r => r.id === state.selectedRoutes[0].id);
+    const last = state.routes.find(r => r.id === state.selectedRoutes[state.selectedRoutes.length-1].id);
+    if (first?.htfaKm) state.kmFromHome = String(first.htfaKm).replace('.', ',');
+    if (last?.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
+  }
+  render();
+}
+
+function moveRoute(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= state.selectedRoutes.length) return;
+  [state.selectedRoutes[idx], state.selectedRoutes[newIdx]] = [state.selectedRoutes[newIdx], state.selectedRoutes[idx]];
+  // Recalc from/to
+  const first = state.routes.find(r => r.id === state.selectedRoutes[0].id);
+  const last = state.routes.find(r => r.id === state.selectedRoutes[state.selectedRoutes.length-1].id);
+  if (first?.htfaKm) state.kmFromHome = String(first.htfaKm).replace('.', ',');
+  if (last?.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
+  render();
+}
+
+async function saveTrip() {
+  if (state.selectedRoutes.length === 0) return;
+  if (!state.authed) { showMsg('⚠️ Log ind først for at gemme', 'error'); return; }
+  
+  const fromHome = parseFloat((state.kmFromHome||'0').replace(',','.'))||0;
+  const toHome = parseFloat((state.kmToHome||'0').replace(',','.'))||0;
+  let totalBetween = 0;
+  const betweenDetails = {};
+  state.selectedRoutes.forEach((r, i) => {
+    if (i > 0) {
+      const val = parseFloat((state.kmBetween[r.id]||'0').replace(',','.'))||0;
+      betweenDetails[r.id] = val;
+      totalBetween += val;
+    }
+  });
+  const totalRouteKm = state.selectedRoutes.reduce((s,r) => s+(r.km||0), 0);
+  const totalHusstande = state.selectedRoutes.reduce((s,r) => s+(r.husstande||0), 0);
+  const totalTransportKm = fromHome + toHome + totalBetween;
+
+  const existingIdx = state.trips.findIndex(t => t.date === state.tripDate);
+  
+  if (existingIdx >= 0) {
+    const existing = state.trips[existingIdx];
+    const existingIds = new Set(existing.routes.map(r => r.id));
+    const newRoutes = state.selectedRoutes.filter(r => !existingIds.has(r.id));
+    if (newRoutes.length === 0) { showMsg('Alle ruter findes allerede', 'error'); return; }
+    
+    const mergedRoutes = [...existing.routes, ...newRoutes.map(r => ({...r}))];
+    const mergedBetween = {...existing.kmBetween, ...betweenDetails};
+    const mergedComments = {...existing.comments, ...state.comments};
+    state.trips[existingIdx] = {
+      ...existing,
+      routes: mergedRoutes,
+      kmFromHome: Math.max(existing.kmFromHome, fromHome),
+      kmToHome: Math.max(existing.kmToHome, toHome),
+      kmBetween: mergedBetween, comments: mergedComments,
+      totalRouteKm: mergedRoutes.reduce((s,r) => s+(r.km||0), 0),
+      totalHusstande: mergedRoutes.reduce((s,r) => s+(r.husstande||0), 0),
+      totalTransportKm: Math.max(existing.kmFromHome,fromHome) + Math.max(existing.kmToHome,toHome) + Object.values(mergedBetween).reduce((s,v)=>s+v,0),
+    };
+  } else {
+    state.trips.push({
+      id: Date.now().toString(),
+      date: state.tripDate,
+      routes: state.selectedRoutes.map(r => ({...r})),
+      kmFromHome: fromHome, kmToHome: toHome,
+      kmBetween: betweenDetails, comments: {...state.comments},
+      acubizRoutes: {},
+      totalRouteKm, totalTransportKm, totalHusstande,
+    });
+    state.trips.sort((a,b) => b.date.localeCompare(a.date));
+  }
+  
+  state.selectedRoutes = [];
+  state.kmFromHome = ''; state.kmToHome = '';
+  state.kmBetween = {}; state.comments = {};
+  state.routeSearch = '';
+  
+  await saveAllTrips();
+  showMsg('✅ Kørsel gemt!', 'success');
+  render();
+}
+
+function toggleAcubiz(tripId, routeId) {
+  const trip = state.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  if (!trip.acubizRoutes) trip.acubizRoutes = {};
+  trip.acubizRoutes[routeId] = !trip.acubizRoutes[routeId];
+  saveAllTrips();
+  render();
+}
+
+function toggleAllAcubiz(tripId) {
+  const trip = state.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  const allDone = trip.routes.every(r => trip.acubizRoutes?.[r.id]);
+  trip.acubizRoutes = {};
+  trip.routes.forEach(r => { trip.acubizRoutes[r.id] = !allDone; });
+  saveAllTrips();
+  render();
+}
+
+function moveTripRoute(tripId, idx, dir) {
+  const trip = state.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= trip.routes.length) return;
+  [trip.routes[idx], trip.routes[newIdx]] = [trip.routes[newIdx], trip.routes[idx]];
+  saveAllTrips();
+  render();
+}
+
+async function confirmDelete() {
+  const dc = state.deleteConfirm;
+  if (dc === 'all') {
+    state.trips = [];
+  } else if (dc?.startsWith('route:')) {
+    const [, tripId, routeId] = dc.split(':');
+    const trip = state.trips.find(t => t.id === tripId);
+    if (trip) {
+      trip.routes = trip.routes.filter(r => r.id !== routeId);
+      if (trip.routes.length === 0) {
+        state.trips = state.trips.filter(t => t.id !== tripId);
+      } else {
+        delete trip.kmBetween[routeId];
+        delete trip.comments[routeId];
+        if (trip.acubizRoutes) delete trip.acubizRoutes[routeId];
+        trip.totalRouteKm = trip.routes.reduce((s,r) => s+(r.km||0), 0);
+        trip.totalHusstande = trip.routes.reduce((s,r) => s+(r.husstande||0), 0);
+        trip.totalTransportKm = trip.kmFromHome + trip.kmToHome + Object.values(trip.kmBetween).reduce((s,v)=>s+v,0);
+      }
+    }
+  } else {
+    state.trips = state.trips.filter(t => t.id !== dc);
+  }
+  state.deleteConfirm = null;
+  await saveAllTrips();
+  render();
+}
+
+function recalcAll() {
+  state.trips.forEach(trip => {
+    trip.routes.forEach(r => {
+      const master = findRoute(r);
+      if (master) {
+        Object.assign(r, { km: master.km, husstande: master.husstande, tid: master.tid, tidMin: master.tidMin });
+      }
+    });
+    const first = findRoute(trip.routes[0]);
+    const last = findRoute(trip.routes[trip.routes.length - 1]);
+    if (first?.htfaKm) trip.kmFromHome = first.htfaKm;
+    if (last?.sathKm) trip.kmToHome = last.sathKm;
+    trip.totalRouteKm = trip.routes.reduce((s,r) => s+(r.km||0), 0);
+    trip.totalHusstande = trip.routes.reduce((s,r) => s+(r.husstande||0), 0);
+    trip.totalTransportKm = trip.kmFromHome + trip.kmToHome + Object.values(trip.kmBetween||{}).reduce((s,v)=>s+v,0);
+  });
+  saveAllTrips();
+  showMsg('✅ Alle kørsler genberegnet', 'success');
+  render();
+}
+
+function updateRoute(id, field, value) {
+  const r = state.routes.find(x => x.id === id);
+  if (r) { r[field] = value; }
+  render();
+}
+
+function createRoute() {
+  const nr = state.newRoute;
+  if (!nr.postnr || !nr.rutenr) { showMsg('❌ Postnr og Rutenr er påkrævet', 'error'); return; }
+  const id = `${nr.postnr}-${nr.rutenr}`;
+  if (state.routes.find(r => r.id === id)) { showMsg(`❌ ${id} findes allerede`, 'error'); return; }
+  const km = parseFloat((nr.km||'0').replace(',','.'))||0;
+  const tidMin = parseInt(nr.tid||'0')||0;
+  state.routes.push({
+    id, postnr: nr.postnr, rutenr: nr.rutenr, by: '',
+    startAdresse: '', slutAdresse: '',
+    husstande: parseInt(nr.husstande||'0')||0, km, tid: tidMin>0?`${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}`:'', tidMin,
+    htfaKm: parseFloat((nr.htfaKm||'0').replace(',','.'))||0,
+    sathKm: parseFloat((nr.sathKm||'0').replace(',','.'))||0,
+    type: nr.isDepot?'depot':'rute', aviser: 0,
+  });
+  state.routes.sort((a,b) => a.id.localeCompare(b.id));
+  state.newRoute = { postnr:'',rutenr:'',by:'',startAdresse:'',slutAdresse:'',husstande:'',km:'',tid:'',htfaKm:'',sathKm:'',isDepot:false };
+  showMsg(`✅ ${id} oprettet!`, 'success');
+  render();
+}
+
+async function reloadData() {
+  state.loading = true; render();
+  await loadRoutes();
+  if (state.authed) await loadTrips();
+  state.loading = false; render();
+}
+
+async function generateSkatPDF() {
+  const filtered = getFilteredTrips().filter(t => (t.totalRouteKm + t.totalTransportKm) > 24);
+  if (filtered.length === 0) { showMsg('Ingen dage med over 24 km', 'error'); return; }
+  
+  const data = JSON.stringify({ trips: filtered, period: state.statsPeriod });
+  
+  // Copy to clipboard for use in Claude chat
+  try {
+    await navigator.clipboard.writeText(data);
+    showMsg(`✅ ${filtered.length} dage kopieret! Indsæt i Claude-chat med "Lav Skat PDF"`, 'success');
+  } catch {
+    // Fallback: show in prompt
+    prompt('Kopiér denne data og indsæt i Claude-chat:', data);
+  }
+}
+
+function attachEvents() {
+  // Events are attached inline via onclick/oninput
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+async function init() {
+  state.loading = true;
+  render();
+  
+  // Load routes (public, no auth needed)
+  await loadRoutes();
+  
+  // Init OAuth
+  initAuth();
+  
+  state.loading = false;
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
