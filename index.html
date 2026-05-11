@@ -131,7 +131,7 @@ const CONFIG = {
   CLIENT_ID: '63213815271-0bie77eiqfs3j6na8m1iq3ek1hug66p9.apps.googleusercontent.com',
   SHEET_ID: '1XBDnloUNP6PNmAxyxcytCYoQYv2rGXGpxct6H5tjHa8',
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
-  ROUTES_SHEET: 'Rutedata',
+  ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
   VERSION: '4.0',
 };
@@ -223,16 +223,36 @@ async function ensureTripsSheet() {
 // ═══════════════════════════════════════════════════════════
 async function loadRoutes() {
   try {
-    const rows = await sheetsGet(`${CONFIG.ROUTES_SHEET}!A1:Z`);
-    if (rows.length < 2) return;
+    let rows;
+    try {
+      rows = await sheetsGet(`${CONFIG.ROUTES_SHEET}!A1:Z`);
+    } catch (e) {
+      // Try fetching sheet names and use the first one
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}?key=${CONFIG.API_KEY}&fields=sheets.properties.title`;
+      const metaRes = await fetch(metaUrl);
+      const meta = await metaRes.json();
+      if (meta.sheets && meta.sheets.length > 0) {
+        const firstName = meta.sheets[0].properties.title;
+        showMsg(`Prøver ark: "${firstName}"`, 'success');
+        rows = await sheetsGet(`${firstName}!A1:Z`);
+      } else {
+        throw new Error('Ingen ark fundet');
+      }
+    }
+    if (!rows || rows.length < 2) { showMsg('Ingen rutedata fundet', 'error'); return; }
     
     const headers = rows[0].map(h => h.toLowerCase().replace(/[\s.()]/g, ''));
     const colIdx = {};
-    headers.forEach((h, i) => colIdx[h] = i);
+    headers.forEach((h, i) => {
+      colIdx[h] = i;
+      // Handle aliases
+      if (h === 'postnummer') colIdx['postnr'] = i;
+      if (h === 'rutenr') colIdx['rutenr'] = i;
+    });
     
     state.routes = rows.slice(1).filter(r => r.length > 1 && r[colIdx['postnr']]).map(row => {
       const get = (key) => row[colIdx[key]] || '';
-      const postnr = get('postnr').toString().trim();
+      const postnr = (get('postnr') || get('postnummer')).toString().trim();
       const rutenr = get('rutenr').toString().trim();
       const by = get('byellerland') || get('by') || '';
       const isDepot = by.toLowerCase() === 'depot' || rutenr.toLowerCase().includes('depot');
@@ -258,7 +278,8 @@ async function loadRoutes() {
     
     showMsg(`✅ ${state.routes.length} ruter indlæst`, 'success');
   } catch (e) {
-    showMsg('❌ Kunne ikke indlæse ruter: ' + e.message, 'error');
+    console.error('Route load error:', e);
+    showMsg('❌ Kunne ikke indlæse ruter: ' + e.message + ' — Tjek at sheetet er delt (mindst "Anyone with link can view")', 'error');
   }
 }
 
@@ -700,6 +721,13 @@ function renderData() {
       <button class="btn btn-blue btn-sm" onclick="reloadData()" style="margin-bottom:8px">🔄 Genindlæs ruter fra Sheet</button>
       ${!state.authed ? '<p style="color:var(--yellow);font-size:0.8rem;margin-top:8px">⚠️ Log ind for at kunne gemme kørsler</p>' : ''}
     </div>
+
+    <div class="card">
+      <div class="card-title">💾 Importér kørsler fra backup</div>
+      <p style="color:var(--text2);font-size:0.8rem;margin-bottom:8px">Indsæt JSON-data fra den gamle app (Eksportér alt):</p>
+      <textarea id="importArea" class="input" rows="4" placeholder='Indsæt JSON her...' style="font-size:0.75rem;margin-bottom:8px"></textarea>
+      <button class="btn btn-green btn-sm" onclick="importBackup()">⬇️ Importér kørsler</button>
+    </div>
     
     ${state.routes.length > 0 ? `
       <div class="card">
@@ -1060,6 +1088,39 @@ async function reloadData() {
   await loadRoutes();
   if (state.authed) await loadTrips();
   state.loading = false; render();
+}
+
+async function importBackup() {
+  const el = document.getElementById('importArea');
+  if (!el || !el.value.trim()) { showMsg('Indsæt JSON-data først', 'error'); return; }
+  if (!state.authed) { showMsg('⚠️ Log ind først', 'error'); return; }
+  
+  try {
+    const data = JSON.parse(el.value.trim());
+    const importTrips = data.trips || [];
+    if (importTrips.length === 0) { showMsg('Ingen kørsler fundet i data', 'error'); return; }
+    
+    // Merge: add trips that don't exist yet (by date+id)
+    const existingIds = new Set(state.trips.map(t => t.id));
+    const existingDates = new Set(state.trips.map(t => t.date));
+    let added = 0;
+    
+    for (const t of importTrips) {
+      if (!existingIds.has(t.id) && !existingDates.has(t.date)) {
+        if (!t.acubizRoutes) t.acubizRoutes = {};
+        state.trips.push(t);
+        added++;
+      }
+    }
+    
+    state.trips.sort((a, b) => b.date.localeCompare(a.date));
+    await saveAllTrips();
+    el.value = '';
+    showMsg(`✅ ${added} kørsler importeret! (${importTrips.length - added} duplikater sprunget over)`, 'success');
+    render();
+  } catch (e) {
+    showMsg('❌ Ugyldig JSON: ' + e.message, 'error');
+  }
 }
 
 async function generateSkatPDF() {
