@@ -501,15 +501,10 @@ function renderNewTrip() {
     <div class="card">
       <div class="card-title">🔍 Vælg ruter</div>
       <div style="position:relative;margin-bottom:12px">
-        <input class="input" placeholder="Søg ruter..." value="${state.routeSearch}" oninput="state.routeSearch=this.value;render()">
+        <input class="input" id="routeSearchInput" placeholder="Søg ruter..." value="${state.routeSearch}" oninput="state.routeSearch=this.value;renderRouteList()">
       </div>
-      <div class="scroll-list" style="max-height:250px">
-        ${filtered.map(r => `
-          <div class="route-item" onclick="addRoute('${r.id}')">
-            <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
-            <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km</span>
-          </div>
-        `).join('')}
+      <div id="routeListContainer" class="scroll-list" style="max-height:250px">
+        ${renderRouteListItems(filtered)}
       </div>
     </div>
     
@@ -875,7 +870,30 @@ function renderDeleteModal() {
 // ═══════════════════════════════════════════════════════════
 // ACTIONS
 // ═══════════════════════════════════════════════════════════
+function renderRouteListItems(filtered) {
+  return filtered.map(r => `
+    <div class="route-item" onclick="addRoute('${r.id}')">
+      <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
+      <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km</span>
+    </div>
+  `).join('');
+}
+
+function renderRouteList() {
+  const search = state.routeSearch.toLowerCase();
+  const filtered = state.routes.filter(r =>
+    !state.selectedRoutes.find(s => s.id === r.id) &&
+    (r.id.toLowerCase().includes(search) || r.by.toLowerCase().includes(search) ||
+     r.startAdresse.toLowerCase().includes(search) || r.postnr.includes(search))
+  );
+  const container = document.getElementById('routeListContainer');
+  if (container) container.innerHTML = renderRouteListItems(filtered);
+}
+
 function addRoute(id) {
+  const r = state.routes.find(x => x.id === id);
+  if (!r || state.selectedRoutes.find(x => x.id === id)) return;
+  state.selectedRoutes.push({...r});
   const r = state.routes.find(x => x.id === id);
   if (!r || state.selectedRoutes.find(x => x.id === id)) return;
   state.selectedRoutes.push({...r});
