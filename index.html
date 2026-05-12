@@ -133,7 +133,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.0',
+  VERSION: '4.1',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -155,6 +155,8 @@ const state = {
   deleteConfirm: null,
   editRouteId: null,
   showAddRoute: false,
+  adHocMode: false,
+  adHoc: { desc:'', by:'', startAddr:'', slutAddr:'', antal:'', km:'', tid:'', fraHjem:'', tilHjem:'', kommentar:'' },
   newRoute: { postnr:'', rutenr:'', by:'', startAdresse:'', slutAdresse:'', husstande:'', km:'', tid:'', htfaKm:'', sathKm:'', isDepot: false },
   msg: null,
   loading: false,
@@ -497,15 +499,52 @@ function renderNewTrip() {
       <div class="card-title">📅 Dato</div>
       <input type="date" class="input" value="${state.tripDate}" onchange="state.tripDate=this.value;render()">
     </div>
-    
+
     <div class="card">
-      <div class="card-title">🔍 Vælg ruter</div>
-      <div style="position:relative;margin-bottom:12px">
-        <input class="input" id="routeSearchInput" placeholder="Søg ruter..." value="${state.routeSearch}" oninput="state.routeSearch=this.value;renderRouteList()">
+      <div class="flex gap-2" style="margin-bottom:12px">
+        <button class="filter-btn ${!state.adHocMode?'active':''}" onclick="state.adHocMode=false;render()">🔍 Vælg ruter</button>
+        <button class="filter-btn ${state.adHocMode?'active':''}" onclick="state.adHocMode=true;render()">📝 Ad hoc opgave</button>
       </div>
-      <div id="routeListContainer" class="scroll-list" style="max-height:250px">
-        ${renderRouteListItems(filtered)}
-      </div>
+
+      ${!state.adHocMode ? `
+        <div style="position:relative;margin-bottom:12px">
+          <input class="input" id="routeSearchInput" placeholder="Søg ruter..." value="${state.routeSearch}" oninput="state.routeSearch=this.value;renderRouteList()">
+        </div>
+        <div id="routeListContainer" class="scroll-list" style="max-height:250px">
+          ${renderRouteListItems(filtered)}
+        </div>
+      ` : `
+        <div class="card-title">📝 Indtast ad hoc opgave</div>
+        <div class="grid-2" style="margin-bottom:8px">
+          <div><span class="label">Beskrivelse *</span>
+            <input class="input input-sm" id="adhocDesc" placeholder="f.eks. Magasiner Faxe" value="${state.adHoc.desc}" oninput="state.adHoc.desc=this.value"></div>
+          <div><span class="label">Område/by</span>
+            <input class="input input-sm" id="adhocBy" placeholder="f.eks. Faxe" value="${state.adHoc.by}" oninput="state.adHoc.by=this.value"></div>
+        </div>
+        <div class="grid-2" style="margin-bottom:8px">
+          <div><span class="label">Startadresse</span>
+            <input class="input input-sm" id="adhocStart" placeholder="Adresse" value="${state.adHoc.startAddr}" oninput="state.adHoc.startAddr=this.value"></div>
+          <div><span class="label">Slutadresse</span>
+            <input class="input input-sm" id="adhocSlut" placeholder="Adresse" value="${state.adHoc.slutAddr}" oninput="state.adHoc.slutAddr=this.value"></div>
+        </div>
+        <div class="grid-4" style="margin-bottom:8px">
+          <div><span class="label">Antal stk</span>
+            <input class="input input-sm" id="adhocAntal" type="number" placeholder="50" value="${state.adHoc.antal}" oninput="state.adHoc.antal=this.value"></div>
+          <div><span class="label">Km kørt</span>
+            <input class="input input-sm" id="adhocKm" placeholder="12,5" value="${state.adHoc.km}" oninput="state.adHoc.km=this.value"></div>
+          <div><span class="label">Tid (min)</span>
+            <input class="input input-sm" id="adhocTid" type="number" placeholder="45" value="${state.adHoc.tid}" oninput="state.adHoc.tid=this.value"></div>
+          <div><span class="label">Km fra hjem</span>
+            <input class="input input-sm" id="adhocFra" placeholder="5" value="${state.adHoc.fraHjem}" oninput="state.adHoc.fraHjem=this.value"></div>
+        </div>
+        <div class="grid-2" style="margin-bottom:8px">
+          <div><span class="label">Km til hjem</span>
+            <input class="input input-sm" id="adhocTil" placeholder="5" value="${state.adHoc.tilHjem}" oninput="state.adHoc.tilHjem=this.value"></div>
+          <div><span class="label">Kommentar</span>
+            <input class="input input-sm" id="adhocKom" placeholder="Valgfri" value="${state.adHoc.kommentar}" oninput="state.adHoc.kommentar=this.value"></div>
+        </div>
+        <button class="btn btn-green btn-sm" onclick="addAdHocRoute()">➕ Tilføj ad hoc</button>
+      `}
     </div>
     
     ${state.selectedRoutes.length > 0 ? `
@@ -519,7 +558,7 @@ function renderNewTrip() {
                   <button onclick="moveRoute(${i},-1)" style="color:${i===0?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px">▲</button>
                   <button onclick="moveRoute(${i},1)" style="color:${i===state.selectedRoutes.length-1?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px">▼</button>
                 </div>
-                <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
+                <span>${r.type === 'depot' ? '🏢' : r.type === 'adhoc' ? '📦' : '📬'} ${r.postnr}-${r.rutenr}</span>
               </div>
               <div class="flex gap-2" style="align-items:center">
                 <span style="color:var(--text3);font-size:0.8rem">${fmtNum(r.km)} km</span>
@@ -645,7 +684,7 @@ function renderTripDetail(trip) {
             background:${isReported?'var(--greenbg)':'var(--bg)'};border:1px solid ${isReported?'rgba(22,163,74,0.3)':'transparent'};font-size:0.8rem">
             <span style="display:flex;align-items:center;gap:8px;color:var(--text)">
               <span style="font-size:1rem">${isReported?'✅':'☐'}</span>
-              ${r.type==='depot'?'🏢':'📬'} ${r.postnr}-${r.rutenr}
+              ${r.type==='depot'?'🏢':r.type==='adhoc'?'📦':'📬'} ${r.postnr}-${r.rutenr}
             </span>
             <span style="color:var(--text2)">${r.husstande} hus · ${fmtNum(r.km)} km${r.tid?' · '+r.tid:''}</span>
           </div>
@@ -734,7 +773,7 @@ function renderData() {
             <div style="background:var(--bg);border-radius:var(--radius-sm);margin-bottom:4px">
               <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:pointer" onclick="state.editRouteId=state.editRouteId==='${r.id}'?null:'${r.id}';render()">
                 <span style="color:var(--text2);font-size:0.85rem">
-                  ${r.type==='depot'?'🏢':'📬'} ${r.postnr}-${r.rutenr}
+                  ${r.type==='depot'?'🏢':r.type==='adhoc'?'📦':'📬'} ${r.postnr}-${r.rutenr}
                   ${(!r.htfaKm&&!r.sathKm)?'<span style="color:var(--yellow);font-size:0.7rem"> ⚠️ km</span>':''}
                 </span>
                 <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km ${state.editRouteId===r.id?'▲':'✏️'}</span>
@@ -873,7 +912,7 @@ function renderDeleteModal() {
 function renderRouteListItems(filtered) {
   return filtered.map(r => `
     <div class="route-item" onclick="addRoute('${r.id}')">
-      <span>${r.type === 'depot' ? '🏢' : '📬'} ${r.postnr}-${r.rutenr}</span>
+      <span>${r.type === 'depot' ? '🏢' : r.type === 'adhoc' ? '📦' : '📬'} ${r.postnr}-${r.rutenr}</span>
       <span style="color:var(--text3);font-size:0.8rem">${r.husstande} hus · ${fmtNum(r.km)} km</span>
     </div>
   `).join('');
@@ -888,6 +927,41 @@ function renderRouteList() {
   );
   const container = document.getElementById('routeListContainer');
   if (container) container.innerHTML = renderRouteListItems(filtered);
+}
+
+function addAdHocRoute() {
+  const ah = state.adHoc;
+  if (!ah.desc) { showMsg('Indtast en beskrivelse', 'error'); return; }
+  const km = parseFloat((ah.km || '0').replace(',', '.')) || 0;
+  const tidMin = parseInt(ah.tid || '0') || 0;
+  const id = `adhoc-${Date.now()}`;
+  const route = {
+    id,
+    postnr: 'Ad hoc',
+    rutenr: ah.desc,
+    by: ah.by || '',
+    startAdresse: ah.startAddr || '',
+    slutAdresse: ah.slutAddr || '',
+    husstande: parseInt(ah.antal || '0') || 0,
+    km,
+    tid: tidMin > 0 ? `${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}` : '',
+    tidMin,
+    htfaKm: parseFloat((ah.fraHjem || '0').replace(',', '.')) || 0,
+    sathKm: parseFloat((ah.tilHjem || '0').replace(',', '.')) || 0,
+    type: 'adhoc',
+    aviser: 0,
+  };
+  state.selectedRoutes.push(route);
+
+  // Auto-fill km from/to home
+  if (state.selectedRoutes.length === 1 && route.htfaKm) {
+    state.kmFromHome = String(route.htfaKm).replace('.', ',');
+  }
+  if (route.sathKm) state.kmToHome = String(route.sathKm).replace('.', ',');
+  if (ah.kommentar) state.comments[id] = ah.kommentar;
+
+  state.adHoc = { desc:'', by:'', startAddr:'', slutAddr:'', antal:'', km:'', tid:'', fraHjem:'', tilHjem:'', kommentar:'' };
+  render();
 }
 
 function addRoute(id) {
