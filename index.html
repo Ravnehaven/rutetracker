@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+A<!DOCTYPE html>
 <html lang="da">
 <head>
 <meta charset="UTF-8">
@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.3',
+  VERSION: '4.4',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -994,8 +994,13 @@ function addRoute(id) {
   const last = state.selectedRoutes[state.selectedRoutes.length - 1];
   if (last.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
   
-  state.routeSearch = '';
+  // Don't clear search - let user keep adding routes from same search
   render();
+  // Restore focus to search input
+  setTimeout(() => {
+    const input = document.getElementById('routeSearchInput');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }, 50);
 }
 
 function removeRoute(idx) {
