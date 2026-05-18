@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.4',
+  VERSION: '4.5',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -698,13 +698,19 @@ function renderTripDetail(trip) {
             <button onclick="moveTripRoute('${trip.id}',${i},1)" style="color:${i===trip.routes.length-1?'#374151':'var(--text2)'};font-size:0.7rem;background:none;padding:1px;cursor:pointer;border:none">▼</button>
           </div>
           <div onclick="toggleAcubiz('${trip.id}','${r.id}')" 
-            style="flex:1;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;
-            background:${isReported?'var(--greenbg)':'var(--bg)'};border:1px solid ${isReported?'rgba(22,163,74,0.3)':'transparent'};font-size:0.8rem">
-            <span style="display:flex;align-items:center;gap:8px;color:var(--text)">
-              <span style="font-size:1rem">${isReported?'✅':'☐'}</span>
-              ${r.type==='depot'?'🏢':r.type==='adhoc'?'📦':'📬'} ${r.postnr}-${r.rutenr}
-            </span>
-            <span style="color:var(--text2)">${r.husstande} hus · ${fmtNum(r.km)} km${r.tid?' · '+r.tid:''}</span>
+            style="flex:1;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;
+            background:${isReported?'var(--greenbg)':'var(--bg)'};border:1px solid ${isReported?'rgba(22,163,74,0.3)':'#2d3748'};font-size:0.8rem">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="display:flex;align-items:center;gap:8px;color:var(--text)">
+                <span style="font-size:1rem">${isReported?'✅':'☐'}</span>
+                ${r.type==='depot'?'🏢':r.type==='adhoc'?'📦':'📬'} ${r.postnr}-${r.rutenr}
+              </span>
+              <span style="color:var(--text2)">${r.husstande} hus · ${fmtNum(r.km)} km${r.tid?' · '+r.tid:''}</span>
+            </div>
+            ${r.startAdresse || r.slutAdresse ? `<div style="font-size:0.7rem;color:#8b9dc3;margin-top:4px;padding-left:28px">
+              📍 ${r.startAdresse || '?'}${r.slutAdresse ? ' → ' + r.slutAdresse : ''}
+            </div>` : ''}
+            ${trip.comments?.[r.id] ? `<div style="font-size:0.7rem;color:#a78bfa;margin-top:2px;padding-left:28px">💬 ${trip.comments[r.id]}</div>` : ''}
           </div>
           <button onclick="state.deleteConfirm='route:${trip.id}:${r.id}';render()" style="color:#f87171;background:none;border:none;padding:4px;cursor:pointer;width:20px">${icons.x}</button>
         </div>`;
