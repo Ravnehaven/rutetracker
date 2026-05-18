@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Rutetracker</title>
-<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1117">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
@@ -133,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.2',
+  VERSION: '4.3',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -348,6 +349,15 @@ function initAuth() {
     setTimeout(initAuth, 500);
     return;
   }
+  
+  // Check for saved token
+  const savedToken = sessionStorage.getItem('rt_access_token');
+  const savedExpiry = sessionStorage.getItem('rt_token_expiry');
+  if (savedToken && savedExpiry && Date.now() < parseInt(savedExpiry)) {
+    state.accessToken = savedToken;
+    state.authed = true;
+  }
+  
   state.tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CONFIG.CLIENT_ID,
     scope: CONFIG.SCOPES,
@@ -358,12 +368,20 @@ function initAuth() {
       }
       state.accessToken = resp.access_token;
       state.authed = true;
+      // Save token with expiry (default ~1 hour)
+      sessionStorage.setItem('rt_access_token', resp.access_token);
+      sessionStorage.setItem('rt_token_expiry', String(Date.now() + (resp.expires_in || 3600) * 1000));
       showMsg('✅ Logget ind!', 'success');
       await ensureTripsSheet();
       await loadTrips();
       render();
     },
   });
+  
+  // If we restored a token, load trips
+  if (state.authed) {
+    ensureTripsSheet().then(() => loadTrips()).then(() => render());
+  }
 }
 
 function doLogin() {
