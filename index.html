@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.5',
+  VERSION: '4.6',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -854,17 +854,129 @@ function renderAddRoute() {
 }
 
 // ─── REPORT ────────────────────────────────────────────
+function getWeekNumber(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7) + 1;
+}
+
+function calcSubtotals(trips) {
+  return trips.reduce((a,t) => ({
+    trips: a.trips+1, routes: a.routes+t.routes.length, husstande: a.husstande+t.totalHusstande,
+    routeKm: a.routeKm+t.totalRouteKm, transportKm: a.transportKm+t.totalTransportKm,
+    fromHome: a.fromHome+t.kmFromHome, toHome: a.toHome+t.kmToHome,
+    between: a.between+Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0),
+    tidMin: a.tidMin+t.routes.reduce((s,r)=>s+(r.tidMin||0),0),
+  }), {trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,fromHome:0,toHome:0,between:0,tidMin:0});
+}
+
+function fmtTid(min) { return min > 0 ? `${Math.floor(min/60)}:${String(min%60).padStart(2,'0')}` : '-'; }
+
+function renderSubtotalRow(label, sub, bgColor) {
+  return `<tr style="font-weight:bold;background:${bgColor};border-top:2px solid #2563eb">
+    <td style="padding:5px 6px" colspan="2">${label}</td>
+    <td style="padding:5px 6px">${sub.trips} kørsler</td>
+    <td style="padding:5px 6px;text-align:right">${sub.husstande}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtNum(sub.routeKm)}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtNum(sub.fromHome)}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtNum(sub.between)}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtNum(sub.toHome)}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtNum(sub.transportKm)}</td>
+    <td style="padding:5px 6px;text-align:right">${fmtTid(sub.tidMin)}</td>
+  </tr>`;
+}
+
 function renderReport() {
-  const filtered = getFilteredTrips();
-  const totals = filtered.reduce((a,t)=>({
-    trips:a.trips+1,routes:a.routes+t.routes.length,husstande:a.husstande+t.totalHusstande,
-    routeKm:a.routeKm+t.totalRouteKm,transportKm:a.transportKm+t.totalTransportKm,
-    tidMin:a.tidMin+t.routes.reduce((s,r)=>s+(r.tidMin||0),0),
-    fromHome:a.fromHome+t.kmFromHome,toHome:a.toHome+t.kmToHome,
-    between:a.between+Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0),
-  }),{trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,tidMin:0,fromHome:0,toHome:0,between:0});
+  const filtered = getFilteredTrips().sort((a,b) => a.date.localeCompare(b.date));
+  const totals = calcSubtotals(filtered);
   const periodLabel = {ytd:`År til dato ${new Date().getFullYear()}`,lastYear:`${new Date().getFullYear()-1}`,thisMonth:'Denne måned',lastMonth:'Sidste måned',custom:`${state.statsFrom} til ${state.statsTo}`}[state.statsPeriod]||'';
-  const tidStr = totals.tidMin>0?`${Math.floor(totals.tidMin/60)}:${String(totals.tidMin%60).padStart(2,'0')}`:'';
+  const tidStr = fmtTid(totals.tidMin);
+  
+  const dkMonths = {'01':'Januar','02':'Februar','03':'Marts','04':'April','05':'Maj','06':'Juni','07':'Juli','08':'August','09':'September','10':'Oktober','11':'November','12':'December'};
+
+  // Group trips by month and week
+  let tableRows = '';
+  let currentMonth = '';
+  let currentWeek = '';
+  let monthTrips = [];
+  let weekTrips = [];
+  let rowIdx = 0;
+
+  for (let i = 0; i < filtered.length; i++) {
+    const t = filtered[i];
+    const month = t.date.substring(0, 7);
+    const week = `${t.date.substring(0,4)}-W${String(getWeekNumber(t.date)).padStart(2,'0')}`;
+    const tMin = t.routes.reduce((s,r) => s+(r.tidMin||0), 0);
+
+    // New month?
+    if (month !== currentMonth) {
+      // Close previous week
+      if (weekTrips.length > 0) {
+        const ws = calcSubtotals(weekTrips);
+        tableRows += renderSubtotalRow(`  Uge ${currentWeek.split('-W')[1]}`, ws, '#f0f4ff');
+      }
+      // Close previous month
+      if (monthTrips.length > 0) {
+        const ms = calcSubtotals(monthTrips);
+        const mParts = currentMonth.split('-');
+        tableRows += renderSubtotalRow(`📅 ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]}`, ms, '#dbeafe');
+      }
+      currentMonth = month;
+      currentWeek = week;
+      monthTrips = [];
+      weekTrips = [];
+
+      // Month header
+      const mParts = month.split('-');
+      tableRows += `<tr><td colspan="10" style="padding:10px 6px 4px;font-weight:bold;font-size:13px;color:#1e3a5f;background:#fff;border-bottom:2px solid #2563eb">
+        ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]}
+      </td></tr>`;
+    }
+
+    // New week within same month?
+    if (week !== currentWeek) {
+      if (weekTrips.length > 0) {
+        const ws = calcSubtotals(weekTrips);
+        tableRows += renderSubtotalRow(`  Uge ${currentWeek.split('-W')[1]}`, ws, '#f0f4ff');
+      }
+      currentWeek = week;
+      weekTrips = [];
+    }
+
+    monthTrips.push(t);
+    weekTrips.push(t);
+
+    // Trip row
+    tableRows += `<tr style="background:${rowIdx%2?'#f8f9fa':'#fff'}">
+      <td style="padding:5px 6px;white-space:nowrap">${fmtDate(t.date)}</td>
+      <td style="padding:5px 6px;text-align:right">${t.routes.length}</td>
+      <td style="padding:5px 6px;font-size:10px">${t.routes.map(r=>r.postnr+'-'+r.rutenr).join(', ')}</td>
+      <td style="padding:5px 6px;text-align:right">${t.totalHusstande}</td>
+      <td style="padding:5px 6px;text-align:right">${fmtNum(t.totalRouteKm)}</td>
+      <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmFromHome)}</td>
+      <td style="padding:5px 6px;text-align:right">${fmtNum(Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0))}</td>
+      <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmToHome)}</td>
+      <td style="padding:5px 6px;text-align:right;font-weight:bold">${fmtNum(t.totalTransportKm)}</td>
+      <td style="padding:5px 6px;text-align:right">${fmtTid(tMin)}</td>
+    </tr>`;
+    rowIdx++;
+  }
+
+  // Close last week and month
+  if (weekTrips.length > 0) {
+    const ws = calcSubtotals(weekTrips);
+    tableRows += renderSubtotalRow(`  Uge ${currentWeek.split('-W')[1]}`, ws, '#f0f4ff');
+  }
+  if (monthTrips.length > 0) {
+    const ms = calcSubtotals(monthTrips);
+    const mParts = currentMonth.split('-');
+    tableRows += renderSubtotalRow(`📅 ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]}`, ms, '#dbeafe');
+  }
+
+  // Grand total
+  tableRows += renderSubtotalRow(`🏁 TOTAL PERIODE`, totals, '#e8f0fe');
 
   return `<div class="report-overlay">
     <div class="report-toolbar no-print">
@@ -878,37 +990,15 @@ function renderReport() {
       <div class="summary-grid">
         ${[{v:totals.trips,l:'Kørsler'},{v:totals.routes,l:'Ruter kørt'},{v:totals.husstande,l:'Husstande'},
           {v:fmtNum(totals.routeKm),l:'Rute-km'},{v:fmtNum(totals.transportKm),l:'Transport-km'},{v:fmtNum(totals.routeKm+totals.transportKm),l:'Total km'},
-          ...(tidStr?[{v:tidStr,l:'Omdelingstid'}]:[])
+          ...(tidStr&&tidStr!=='-'?[{v:tidStr,l:'Omdelingstid'}]:[])
         ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
       </div>
-      <h2 style="font-size:15px;border-bottom:2px solid #2563eb;padding-bottom:4px;margin-bottom:10px">Oversigt</h2>
+      <h2 style="font-size:15px;border-bottom:2px solid #2563eb;padding-bottom:4px;margin-bottom:10px">Oversigt pr. uge og måned</h2>
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:24px">
         <thead><tr style="background:#1e293b;color:#fff">
           ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Tid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
-        </tr></thead><tbody>
-          ${filtered.map((t,i)=>{
-            const tMin=t.routes.reduce((s,r)=>s+(r.tidMin||0),0);
-            return `<tr style="background:${i%2?'#f8f9fa':'#fff'}">
-              <td style="padding:5px 6px">${fmtDate(t.date)}</td>
-              <td style="padding:5px 6px;text-align:right">${t.routes.length}</td>
-              <td style="padding:5px 6px;font-size:10px">${t.routes.map(r=>r.postnr+'-'+r.rutenr).join(', ')}</td>
-              <td style="padding:5px 6px;text-align:right">${t.totalHusstande}</td>
-              <td style="padding:5px 6px;text-align:right">${fmtNum(t.totalRouteKm)}</td>
-              <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmFromHome)}</td>
-              <td style="padding:5px 6px;text-align:right">${fmtNum(Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0))}</td>
-              <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmToHome)}</td>
-              <td style="padding:5px 6px;text-align:right;font-weight:bold">${fmtNum(t.totalTransportKm)}</td>
-              <td style="padding:5px 6px;text-align:right">${tMin>0?Math.floor(tMin/60)+':'+String(tMin%60).padStart(2,'0'):'-'}</td>
-            </tr>`}).join('')}
-          <tr style="font-weight:bold;background:#e8f0fe;border-top:2px solid #2563eb">
-            <td style="padding:6px">TOTAL</td><td style="padding:6px;text-align:right">${totals.routes}</td>
-            <td style="padding:6px">${totals.trips} kørsler</td><td style="padding:6px;text-align:right">${totals.husstande}</td>
-            <td style="padding:6px;text-align:right">${fmtNum(totals.routeKm)}</td><td style="padding:6px;text-align:right">${fmtNum(totals.fromHome)}</td>
-            <td style="padding:6px;text-align:right">${fmtNum(totals.between)}</td><td style="padding:6px;text-align:right">${fmtNum(totals.toHome)}</td>
-            <td style="padding:6px;text-align:right">${fmtNum(totals.transportKm)}</td>
-            <td style="padding:6px;text-align:right">${tidStr||'-'}</td>
-          </tr>
-        </tbody>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
       </table>
     </div>
   </div>`;
