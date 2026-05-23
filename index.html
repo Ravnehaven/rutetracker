@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.6',
+  VERSION: '4.7',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -155,6 +155,7 @@ const state = {
   showReport: false, showSkatExport: false,
   deleteConfirm: null,
   editRouteId: null,
+  calcDistances: false,
   showAddRoute: false,
   adHocMode: false,
   adHoc: { desc:'', by:'', startAddr:'', slutAddr:'', antal:'', km:'', tid:'', fraHjem:'', tilHjem:'', kommentar:'' },
@@ -567,7 +568,7 @@ function renderNewTrip() {
     
     ${state.selectedRoutes.length > 0 ? `
       <div class="card">
-        <div class="card-title">📋 Valgte ruter (${state.selectedRoutes.length})</div>
+        <div class="card-title">📋 Valgte ruter (${state.selectedRoutes.length}) ${state.calcDistances ? '<span style="color:var(--yellow);font-size:0.8rem;font-weight:normal"> ⏳ Beregner km...</span>' : ''}</div>
         ${state.selectedRoutes.map((r, i) => `
           <div style="margin-bottom:8px">
             <div class="route-item selected">
@@ -1066,16 +1067,115 @@ function addAdHocRoute() {
     aviser: 0,
   };
   state.selectedRoutes.push(route);
-
-  // Auto-fill km from/to home
-  if (state.selectedRoutes.length === 1 && route.htfaKm) {
-    state.kmFromHome = String(route.htfaKm).replace('.', ',');
-  }
-  if (route.sathKm) state.kmToHome = String(route.sathKm).replace('.', ',');
   if (ah.kommentar) state.comments[id] = ah.kommentar;
 
   state.adHoc = { desc:'', by:'', startAddr:'', slutAddr:'', antal:'', km:'', tid:'', fraHjem:'', tilHjem:'', kommentar:'' };
+  recalcAllDistances();
+}
+
+// ═══════════════════════════════════════════════════════════
+// GOOGLE ROUTES API - auto-calculate distances
+// ═══════════════════════════════════════════════════════════
+const homeAddress = 'Rosenvænget 2A, 4640 Faxe, Denmark';
+let distanceCache = {};
+
+// Load cache from sessionStorage
+try { distanceCache = JSON.parse(sessionStorage.getItem('rt_dist_cache') || '{}'); } catch {}
+
+function saveDistanceCache() {
+  try { sessionStorage.setItem('rt_dist_cache', JSON.stringify(distanceCache)); } catch {}
+}
+
+function cacheKey(from, to) {
+  return `${from}|||${to}`;
+}
+
+async function getRouteDistance(fromAddr, toAddr) {
+  if (!fromAddr || !toAddr) return null;
+  const key = cacheKey(fromAddr, toAddr);
+  if (distanceCache[key] !== undefined) return distanceCache[key];
+
+  try {
+    const url = `https://routes.googleapis.com/directions/v2:computeRoutes`;
+    const body = {
+      origin: { address: fromAddr },
+      destination: { address: toAddr },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_UNAWARE',
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': CONFIG.API_KEY,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      console.error('Routes API error:', res.status, await res.text());
+      return null;
+    }
+    const data = await res.json();
+    if (data.routes && data.routes.length > 0) {
+      const km = Math.round(data.routes[0].distanceMeters / 100) / 10; // 1 decimal
+      const durSec = parseInt(data.routes[0].duration) || 0;
+      const result = { km, durMin: Math.round(durSec / 60) };
+      distanceCache[key] = result;
+      saveDistanceCache();
+      return result;
+    }
+  } catch (e) {
+    console.error('Routes API fetch error:', e);
+  }
+  return null;
+}
+
+function getEndAddress(route) {
+  return route.slutAdresse || route.startAdresse || '';
+}
+
+function getStartAddress(route) {
+  return route.startAdresse || route.slutAdresse || '';
+}
+
+async function recalcAllDistances() {
+  if (state.selectedRoutes.length === 0) return;
+  state.calcDistances = true;
   render();
+
+  const routes = state.selectedRoutes;
+
+  // Km from home to first route's start
+  const firstStart = getStartAddress(routes[0]);
+  if (firstStart) {
+    const d = await getRouteDistance(homeAddress, firstStart);
+    if (d) state.kmFromHome = String(d.km).replace('.', ',');
+  }
+
+  // Km between consecutive routes
+  for (let i = 1; i < routes.length; i++) {
+    const prevEnd = getEndAddress(routes[i - 1]);
+    const currStart = getStartAddress(routes[i]);
+    if (prevEnd && currStart) {
+      const d = await getRouteDistance(prevEnd, currStart);
+      if (d) state.kmBetween[routes[i].id] = String(d.km).replace('.', ',');
+    }
+  }
+
+  // Km from last route's end to home
+  const lastEnd = getEndAddress(routes[routes.length - 1]);
+  if (lastEnd) {
+    const d = await getRouteDistance(lastEnd, homeAddress);
+    if (d) state.kmToHome = String(d.km).replace('.', ',');
+  }
+
+  state.calcDistances = false;
+  render();
+  setTimeout(() => {
+    const input = document.getElementById('routeSearchInput');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }, 50);
 }
 
 function addRoute(id) {
@@ -1083,44 +1183,27 @@ function addRoute(id) {
   if (!r || state.selectedRoutes.find(x => x.id === id)) return;
   state.selectedRoutes.push({...r});
   
-  // Auto-fill km from/to home
-  if (state.selectedRoutes.length === 1 && r.htfaKm) {
-    state.kmFromHome = String(r.htfaKm).replace('.', ',');
-  }
-  const last = state.selectedRoutes[state.selectedRoutes.length - 1];
-  if (last.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
-  
-  // Don't clear search - let user keep adding routes from same search
-  render();
-  // Restore focus to search input
-  setTimeout(() => {
-    const input = document.getElementById('routeSearchInput');
-    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }, 50);
+  // Auto-calculate distances via API
+  recalcAllDistances();
 }
 
 function removeRoute(idx) {
   state.selectedRoutes.splice(idx, 1);
-  // Recalc from/to
   if (state.selectedRoutes.length > 0) {
-    const first = state.routes.find(r => r.id === state.selectedRoutes[0].id);
-    const last = state.routes.find(r => r.id === state.selectedRoutes[state.selectedRoutes.length-1].id);
-    if (first?.htfaKm) state.kmFromHome = String(first.htfaKm).replace('.', ',');
-    if (last?.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
+    recalcAllDistances();
+  } else {
+    state.kmFromHome = '';
+    state.kmToHome = '';
+    state.kmBetween = {};
+    render();
   }
-  render();
 }
 
 function moveRoute(idx, dir) {
   const newIdx = idx + dir;
   if (newIdx < 0 || newIdx >= state.selectedRoutes.length) return;
   [state.selectedRoutes[idx], state.selectedRoutes[newIdx]] = [state.selectedRoutes[newIdx], state.selectedRoutes[idx]];
-  // Recalc from/to
-  const first = state.routes.find(r => r.id === state.selectedRoutes[0].id);
-  const last = state.routes.find(r => r.id === state.selectedRoutes[state.selectedRoutes.length-1].id);
-  if (first?.htfaKm) state.kmFromHome = String(first.htfaKm).replace('.', ',');
-  if (last?.sathKm) state.kmToHome = String(last.sathKm).replace('.', ',');
-  render();
+  recalcAllDistances();
 }
 
 async function saveTrip() {
