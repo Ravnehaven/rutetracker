@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.8',
+  VERSION: '4.9',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1344,24 +1344,62 @@ async function confirmDelete() {
   render();
 }
 
-function recalcAll() {
-  state.trips.forEach(trip => {
+async function recalcAll() {
+  if (!state.authed) { showMsg('⚠️ Log ind først', 'error'); return; }
+  
+  const total = state.trips.length;
+  let done = 0;
+  showMsg(`⏳ Genberegner 0/${total} kørsler...`, 'success');
+
+  for (const trip of state.trips) {
+    // Update route master data
     trip.routes.forEach(r => {
       const master = findRoute(r);
       if (master) {
         Object.assign(r, { km: master.km, husstande: master.husstande, tid: master.tid, tidMin: master.tidMin });
       }
     });
-    const first = findRoute(trip.routes[0]);
-    const last = findRoute(trip.routes[trip.routes.length - 1]);
-    if (first?.htfaKm) trip.kmFromHome = first.htfaKm;
-    if (last?.sathKm) trip.kmToHome = last.sathKm;
-    trip.totalRouteKm = trip.routes.reduce((s,r) => s+(r.km||0), 0);
-    trip.totalHusstande = trip.routes.reduce((s,r) => s+(r.husstande||0), 0);
-    trip.totalTransportKm = trip.kmFromHome + trip.kmToHome + Object.values(trip.kmBetween||{}).reduce((s,v)=>s+v,0);
-  });
-  saveAllTrips();
-  showMsg('✅ Alle kørsler genberegnet', 'success');
+
+    // Calculate km from home to first route
+    const firstStart = getStartAddress(trip.routes[0]);
+    if (firstStart) {
+      const d = await getRouteDistance(homeAddress, firstStart);
+      if (d) trip.kmFromHome = d.km;
+    }
+
+    // Calculate km between routes
+    const newBetween = {};
+    for (let i = 1; i < trip.routes.length; i++) {
+      const prevEnd = getEndAddress(trip.routes[i - 1]);
+      const currStart = getStartAddress(trip.routes[i]);
+      if (prevEnd && currStart) {
+        const d = await getRouteDistance(prevEnd, currStart);
+        if (d) newBetween[trip.routes[i].id] = d.km;
+        else newBetween[trip.routes[i].id] = trip.kmBetween?.[trip.routes[i].id] || 0;
+      }
+    }
+    trip.kmBetween = newBetween;
+
+    // Calculate km from last route to home
+    const lastEnd = getEndAddress(trip.routes[trip.routes.length - 1]);
+    if (lastEnd) {
+      const d = await getRouteDistance(lastEnd, homeAddress);
+      if (d) trip.kmToHome = d.km;
+    }
+
+    // Recalc totals
+    trip.totalRouteKm = trip.routes.reduce((s, r) => s + (r.km || 0), 0);
+    trip.totalHusstande = trip.routes.reduce((s, r) => s + (r.husstande || 0), 0);
+    trip.totalTransportKm = trip.kmFromHome + trip.kmToHome + Object.values(trip.kmBetween).reduce((s, v) => s + v, 0);
+
+    done++;
+    if (done % 3 === 0 || done === total) {
+      showMsg(`⏳ Genberegner ${done}/${total} kørsler...`, 'success');
+    }
+  }
+
+  await saveAllTrips();
+  showMsg(`✅ ${total} kørsler genberegnet med km fra Routes API`, 'success');
   render();
 }
 
