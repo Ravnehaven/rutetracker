@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.7',
+  VERSION: '4.8',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -148,6 +148,7 @@ const state = {
   tripDate: new Date().toISOString().split('T')[0],
   kmFromHome: '', kmToHome: '',
   kmBetween: {}, comments: {},
+  driveTimes: {}, // { 'fromHome': 12, 'routeId': 8, 'toHome': 15 } in minutes
   routeSearch: '',
   expandedTrip: null,
   acubizFilter: 'all',
@@ -589,12 +590,14 @@ function renderNewTrip() {
                 <span style="color:var(--text3);font-size:0.8rem">🏠→</span>
                 <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmFromHome}" oninput="state.kmFromHome=this.value">
                 <span style="color:var(--text3);font-size:0.75rem">km fra hjem</span>
+                ${state.driveTimes['fromHome'] ? `<span style="color:var(--blue2);font-size:0.7rem">🚗 ${state.driveTimes['fromHome']} min</span>` : ''}
               </div>
             ` : `
               <div style="padding:4px 8px;display:flex;align-items:center;gap:8px">
                 <span style="color:var(--text3);font-size:0.8rem">↕</span>
                 <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmBetween[r.id]||''}" oninput="state.kmBetween['${r.id}']=this.value">
-                <span style="color:var(--text3);font-size:0.75rem">km mellem ruter</span>
+                <span style="color:var(--text3);font-size:0.75rem">km mellem</span>
+                ${state.driveTimes[r.id] ? `<span style="color:var(--blue2);font-size:0.7rem">🚗 ${state.driveTimes[r.id]} min</span>` : ''}
               </div>
             `}
             ${i === state.selectedRoutes.length - 1 ? `
@@ -602,6 +605,7 @@ function renderNewTrip() {
                 <span style="color:var(--text3);font-size:0.8rem">→🏠</span>
                 <input class="input input-sm" style="width:80px" placeholder="km" value="${state.kmToHome}" oninput="state.kmToHome=this.value">
                 <span style="color:var(--text3);font-size:0.75rem">km til hjem</span>
+                ${state.driveTimes['toHome'] ? `<span style="color:var(--blue2);font-size:0.7rem">🚗 ${state.driveTimes['toHome']} min</span>` : ''}
               </div>
             ` : ''}
             <div style="padding:4px 8px">
@@ -1112,21 +1116,24 @@ async function getRouteDistance(fromAddr, toAddr) {
       },
       body: JSON.stringify(body),
     });
+    const data = await res.json();
     if (!res.ok) {
-      console.error('Routes API error:', res.status, await res.text());
+      console.error('Routes API error:', res.status, JSON.stringify(data));
+      showMsg('⚠️ Routes API fejl: ' + (data.error?.message || res.status), 'error');
       return null;
     }
-    const data = await res.json();
     if (data.routes && data.routes.length > 0) {
-      const km = Math.round(data.routes[0].distanceMeters / 100) / 10; // 1 decimal
-      const durSec = parseInt(data.routes[0].duration) || 0;
-      const result = { km, durMin: Math.round(durSec / 60) };
+      const km = Math.round(data.routes[0].distanceMeters / 100) / 10;
+      const durStr = String(data.routes[0].duration || '0s').replace('s', '');
+      const durMin = Math.round(parseInt(durStr) / 60) || 0;
+      const result = { km, durMin };
       distanceCache[key] = result;
       saveDistanceCache();
       return result;
     }
   } catch (e) {
     console.error('Routes API fetch error:', e);
+    showMsg('⚠️ Netværksfejl ved km-beregning', 'error');
   }
   return null;
 }
@@ -1142,6 +1149,7 @@ function getStartAddress(route) {
 async function recalcAllDistances() {
   if (state.selectedRoutes.length === 0) return;
   state.calcDistances = true;
+  state.driveTimes = {};
   render();
 
   const routes = state.selectedRoutes;
@@ -1150,7 +1158,10 @@ async function recalcAllDistances() {
   const firstStart = getStartAddress(routes[0]);
   if (firstStart) {
     const d = await getRouteDistance(homeAddress, firstStart);
-    if (d) state.kmFromHome = String(d.km).replace('.', ',');
+    if (d) {
+      state.kmFromHome = String(d.km).replace('.', ',');
+      state.driveTimes['fromHome'] = d.durMin;
+    }
   }
 
   // Km between consecutive routes
@@ -1159,7 +1170,10 @@ async function recalcAllDistances() {
     const currStart = getStartAddress(routes[i]);
     if (prevEnd && currStart) {
       const d = await getRouteDistance(prevEnd, currStart);
-      if (d) state.kmBetween[routes[i].id] = String(d.km).replace('.', ',');
+      if (d) {
+        state.kmBetween[routes[i].id] = String(d.km).replace('.', ',');
+        state.driveTimes[routes[i].id] = d.durMin;
+      }
     }
   }
 
@@ -1167,7 +1181,10 @@ async function recalcAllDistances() {
   const lastEnd = getEndAddress(routes[routes.length - 1]);
   if (lastEnd) {
     const d = await getRouteDistance(lastEnd, homeAddress);
-    if (d) state.kmToHome = String(d.km).replace('.', ',');
+    if (d) {
+      state.kmToHome = String(d.km).replace('.', ',');
+      state.driveTimes['toHome'] = d.durMin;
+    }
   }
 
   state.calcDistances = false;
@@ -1262,6 +1279,7 @@ async function saveTrip() {
   state.selectedRoutes = [];
   state.kmFromHome = ''; state.kmToHome = '';
   state.kmBetween = {}; state.comments = {};
+  state.driveTimes = {};
   state.routeSearch = '';
   
   await saveAllTrips();
