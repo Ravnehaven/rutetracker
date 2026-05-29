@@ -290,7 +290,7 @@ async function loadRoutes() {
 
 async function loadTrips() {
   try {
-    const rows = await sheetsGet(`${CONFIG.TRIPS_SHEET}!A2:N`);
+    const rows = await sheetsGet(`${CONFIG.TRIPS_SHEET}!A2:O`);
     state.trips = rows.filter(r => r.length > 1).map(row => {
       const parseJ = (s) => { try { return JSON.parse(s || '{}'); } catch { return {}; } };
       const parseA = (s) => { try { return JSON.parse(s || '[]'); } catch { return []; } };
@@ -335,10 +335,10 @@ async function saveAllTrips() {
   try {
     await ensureTripsSheet();
     if (state.trips.length === 0) {
-      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:N2`, [['', '', '', '', '', '', '', '', '', '', '', '', '', '']]);
+      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:O2`, [['', '', '', '', '', '', '', '', '', '', '', '', '', '', '']]);
     } else {
       const values = state.trips.map(tripToRow);
-      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:N${values.length + 1}`, values);
+      await sheetsUpdate(`${CONFIG.TRIPS_SHEET}!A2:O${values.length + 1}`, values);
     }
   } catch (e) {
     showMsg('❌ Gemme-fejl: ' + e.message, 'error');
@@ -893,7 +893,7 @@ function renderSubtotalRow(label, sub, bgColor) {
     <td style="padding:5px 6px;text-align:right">${fmtNum(sub.toHome)}</td>
     <td style="padding:5px 6px;text-align:right">${fmtNum(sub.transportKm)}</td>
     <td style="padding:5px 6px;text-align:right">${fmtTid(sub.tidMin)}</td>
-    <td style="padding:5px 6px;text-align:right;color:#1d4ed8">${sub.driveMin > 0 ? fmtTid(sub.driveMin) : '-'}</td>
+    <td style="padding:5px 6px;text-align:right;color:#3b82f6">${sub.driveMin > 0 ? fmtTid(sub.driveMin) : '-'}</td>
   </tr>`;
 }
 
@@ -959,7 +959,7 @@ function renderReport() {
     weekTrips.push(t);
 
     // Trip row
-    const driveMin = Object.values(t.driveTimes || {}).reduce((s,v) => s + (v||0), 0);
+    const driveMin = Object.values(t.driveTimes||{}).reduce((s,v)=>s+(v||0),0);
     tableRows += `<tr style="background:${rowIdx%2?'#f8f9fa':'#fff'}">
       <td style="padding:5px 6px;white-space:nowrap">${fmtDate(t.date)}</td>
       <td style="padding:5px 6px;text-align:right">${t.routes.length}</td>
@@ -971,7 +971,7 @@ function renderReport() {
       <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmToHome)}</td>
       <td style="padding:5px 6px;text-align:right;font-weight:bold">${fmtNum(t.totalTransportKm)}</td>
       <td style="padding:5px 6px;text-align:right">${fmtTid(tMin)}</td>
-      <td style="padding:5px 6px;text-align:right;color:#1d4ed8">${driveMin > 0 ? fmtTid(driveMin) : '-'}</td>
+      <td style="padding:5px 6px;text-align:right;color:#2563eb">${driveMin > 0 ? fmtTid(driveMin) : '-'}</td>
     </tr>`;
     rowIdx++;
   }
@@ -1003,12 +1003,12 @@ function renderReport() {
         ${[{v:totals.trips,l:'Kørsler'},{v:totals.routes,l:'Ruter kørt'},{v:totals.husstande,l:'Husstande'},
           {v:fmtNum(totals.routeKm),l:'Rute-km'},{v:fmtNum(totals.transportKm),l:'Transport-km'},{v:fmtNum(totals.routeKm+totals.transportKm),l:'Total km'},
           ...(tidStr&&tidStr!=='-'?[{v:tidStr,l:'Omdelingstid'}]:[]),
-          ...(driveStr&&driveStr!=='-'?[{v:driveStr,l:'Køretid transport'}]:[]),        ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
+          ...(driveStr&&driveStr!=='-'?[{v:driveStr,l:'Køretid (transp.)'}]:[]),        ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
       </div>
       <h2 style="font-size:15px;border-bottom:2px solid #2563eb;padding-bottom:4px;margin-bottom:10px">Oversigt pr. uge og måned</h2>
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:24px">
         <thead><tr style="background:#1e293b;color:#fff">
-          ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Omdelingstid','Køretid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
+          ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Tid','Køretid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
@@ -1260,12 +1260,13 @@ async function saveTrip() {
     const mergedRoutes = [...existing.routes, ...newRoutes.map(r => ({...r}))];
     const mergedBetween = {...existing.kmBetween, ...betweenDetails};
     const mergedComments = {...existing.comments, ...state.comments};
+    const mergedDriveTimes = {...(existing.driveTimes||{}), ...state.driveTimes};
     state.trips[existingIdx] = {
       ...existing,
       routes: mergedRoutes,
       kmFromHome: Math.max(existing.kmFromHome, fromHome),
       kmToHome: Math.max(existing.kmToHome, toHome),
-      kmBetween: mergedBetween, comments: mergedComments,
+      kmBetween: mergedBetween, comments: mergedComments, driveTimes: mergedDriveTimes,
       totalRouteKm: mergedRoutes.reduce((s,r) => s+(r.km||0), 0),
       totalHusstande: mergedRoutes.reduce((s,r) => s+(r.husstande||0), 0),
       totalTransportKm: Math.max(existing.kmFromHome,fromHome) + Math.max(existing.kmToHome,toHome) + Object.values(mergedBetween).reduce((s,v)=>s+v,0),
@@ -1395,7 +1396,6 @@ async function recalcAll() {
       const d = await getRouteDistance(lastEnd, homeAddress);
       if (d) { trip.kmToHome = d.km; newDriveTimes['toHome'] = d.durMin; }
     }
-
     trip.driveTimes = newDriveTimes;
 
     // Recalc totals
