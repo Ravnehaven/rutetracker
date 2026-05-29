@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '4.9',
+  VERSION: '5.0',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -307,6 +307,7 @@ async function loadTrips() {
         totalTransportKm: parseFloat(row[9]) || 0,
         totalHusstande: parseInt(row[10]) || 0,
         totalTidMin: parseInt(row[11]) || 0,
+        driveTimes: parseJ(row[14]),
       };
     }).sort((a, b) => b.date.localeCompare(a.date));
   } catch (e) {
@@ -325,6 +326,7 @@ function tripToRow(t) {
     t.routes.reduce((s, r) => s + (r.tidMin || 0), 0),
     t.createdAt || new Date().toISOString(),
     new Date().toISOString(),
+    JSON.stringify(t.driveTimes || {}),
   ];
 }
 
@@ -874,7 +876,8 @@ function calcSubtotals(trips) {
     fromHome: a.fromHome+t.kmFromHome, toHome: a.toHome+t.kmToHome,
     between: a.between+Object.values(t.kmBetween||{}).reduce((s,v)=>s+v,0),
     tidMin: a.tidMin+t.routes.reduce((s,r)=>s+(r.tidMin||0),0),
-  }), {trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,fromHome:0,toHome:0,between:0,tidMin:0});
+    driveMin: a.driveMin+Object.values(t.driveTimes||{}).reduce((s,v)=>s+(v||0),0),
+  }), {trips:0,routes:0,husstande:0,routeKm:0,transportKm:0,fromHome:0,toHome:0,between:0,tidMin:0,driveMin:0});
 }
 
 function fmtTid(min) { return min > 0 ? `${Math.floor(min/60)}:${String(min%60).padStart(2,'0')}` : '-'; }
@@ -890,6 +893,7 @@ function renderSubtotalRow(label, sub, bgColor) {
     <td style="padding:5px 6px;text-align:right">${fmtNum(sub.toHome)}</td>
     <td style="padding:5px 6px;text-align:right">${fmtNum(sub.transportKm)}</td>
     <td style="padding:5px 6px;text-align:right">${fmtTid(sub.tidMin)}</td>
+    <td style="padding:5px 6px;text-align:right;color:#1d4ed8">${sub.driveMin > 0 ? fmtTid(sub.driveMin) : '-'}</td>
   </tr>`;
 }
 
@@ -898,6 +902,7 @@ function renderReport() {
   const totals = calcSubtotals(filtered);
   const periodLabel = {ytd:`År til dato ${new Date().getFullYear()}`,lastYear:`${new Date().getFullYear()-1}`,thisMonth:'Denne måned',lastMonth:'Sidste måned',custom:`${state.statsFrom} til ${state.statsTo}`}[state.statsPeriod]||'';
   const tidStr = fmtTid(totals.tidMin);
+  const driveStr = fmtTid(totals.driveMin);
   
   const dkMonths = {'01':'Januar','02':'Februar','03':'Marts','04':'April','05':'Maj','06':'Juni','07':'Juli','08':'August','09':'September','10':'Oktober','11':'November','12':'December'};
 
@@ -954,6 +959,7 @@ function renderReport() {
     weekTrips.push(t);
 
     // Trip row
+    const driveMin = Object.values(t.driveTimes || {}).reduce((s,v) => s + (v||0), 0);
     tableRows += `<tr style="background:${rowIdx%2?'#f8f9fa':'#fff'}">
       <td style="padding:5px 6px;white-space:nowrap">${fmtDate(t.date)}</td>
       <td style="padding:5px 6px;text-align:right">${t.routes.length}</td>
@@ -965,6 +971,7 @@ function renderReport() {
       <td style="padding:5px 6px;text-align:right">${fmtNum(t.kmToHome)}</td>
       <td style="padding:5px 6px;text-align:right;font-weight:bold">${fmtNum(t.totalTransportKm)}</td>
       <td style="padding:5px 6px;text-align:right">${fmtTid(tMin)}</td>
+      <td style="padding:5px 6px;text-align:right;color:#1d4ed8">${driveMin > 0 ? fmtTid(driveMin) : '-'}</td>
     </tr>`;
     rowIdx++;
   }
@@ -995,13 +1002,13 @@ function renderReport() {
       <div class="summary-grid">
         ${[{v:totals.trips,l:'Kørsler'},{v:totals.routes,l:'Ruter kørt'},{v:totals.husstande,l:'Husstande'},
           {v:fmtNum(totals.routeKm),l:'Rute-km'},{v:fmtNum(totals.transportKm),l:'Transport-km'},{v:fmtNum(totals.routeKm+totals.transportKm),l:'Total km'},
-          ...(tidStr&&tidStr!=='-'?[{v:tidStr,l:'Omdelingstid'}]:[])
-        ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
+          ...(tidStr&&tidStr!=='-'?[{v:tidStr,l:'Omdelingstid'}]:[]),
+          ...(driveStr&&driveStr!=='-'?[{v:driveStr,l:'Køretid transport'}]:[]),        ].map(c=>`<div class="summary-box"><div class="val">${c.v}</div><div class="lbl">${c.l}</div></div>`).join('')}
       </div>
       <h2 style="font-size:15px;border-bottom:2px solid #2563eb;padding-bottom:4px;margin-bottom:10px">Oversigt pr. uge og måned</h2>
       <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:24px">
         <thead><tr style="background:#1e293b;color:#fff">
-          ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Tid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
+          ${['Dato','Ant.','Rutenumre','Hus.','Rute-km','Fra hjem','Mellem','Til hjem','Transport','Omdelingstid','Køretid'].map(h=>`<th style="padding:6px;text-align:${['Dato','Rutenumre'].includes(h)?'left':'right'};font-size:10px">${h}</th>`).join('')}
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
@@ -1271,6 +1278,7 @@ async function saveTrip() {
       kmFromHome: fromHome, kmToHome: toHome,
       kmBetween: betweenDetails, comments: {...state.comments},
       acubizRoutes: {},
+      driveTimes: {...state.driveTimes},
       totalRouteKm, totalTransportKm, totalHusstande,
     });
     state.trips.sort((a,b) => b.date.localeCompare(a.date));
@@ -1362,9 +1370,10 @@ async function recalcAll() {
 
     // Calculate km from home to first route
     const firstStart = getStartAddress(trip.routes[0]);
+    const newDriveTimes = {};
     if (firstStart) {
       const d = await getRouteDistance(homeAddress, firstStart);
-      if (d) trip.kmFromHome = d.km;
+      if (d) { trip.kmFromHome = d.km; newDriveTimes['fromHome'] = d.durMin; }
     }
 
     // Calculate km between routes
@@ -1374,7 +1383,7 @@ async function recalcAll() {
       const currStart = getStartAddress(trip.routes[i]);
       if (prevEnd && currStart) {
         const d = await getRouteDistance(prevEnd, currStart);
-        if (d) newBetween[trip.routes[i].id] = d.km;
+        if (d) { newBetween[trip.routes[i].id] = d.km; newDriveTimes[trip.routes[i].id] = d.durMin; }
         else newBetween[trip.routes[i].id] = trip.kmBetween?.[trip.routes[i].id] || 0;
       }
     }
@@ -1384,8 +1393,10 @@ async function recalcAll() {
     const lastEnd = getEndAddress(trip.routes[trip.routes.length - 1]);
     if (lastEnd) {
       const d = await getRouteDistance(lastEnd, homeAddress);
-      if (d) trip.kmToHome = d.km;
+      if (d) { trip.kmToHome = d.km; newDriveTimes['toHome'] = d.durMin; }
     }
+
+    trip.driveTimes = newDriveTimes;
 
     // Recalc totals
     trip.totalRouteKm = trip.routes.reduce((s, r) => s + (r.km || 0), 0);
