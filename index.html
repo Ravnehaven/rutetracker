@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '5.3',
+  VERSION: '5.4',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -906,7 +906,7 @@ function renderReport() {
   
   const dkMonths = {'01':'Januar','02':'Februar','03':'Marts','04':'April','05':'Maj','06':'Juni','07':'Juli','08':'August','09':'September','10':'Oktober','11':'November','12':'December'};
 
-  // Group trips: weeks split per month boundary
+  // Group trips: weeks split per month boundary, week header at top of each group
   let tableRows = '';
   let currentMonth = '';
   let currentWeek = '';
@@ -918,6 +918,7 @@ function renderReport() {
     const t = filtered[i];
     const month = t.date.substring(0, 7);
     const week = `${t.date.substring(0,4)}-W${String(getWeekNumber(t.date)).padStart(2,'0')}`;
+    const weekNum = String(getWeekNumber(t.date)).padStart(2,'0');
     const tMin = t.routes.reduce((s,r) => s+(r.tidMin||0), 0);
 
     const monthChanged = month !== currentMonth;
@@ -926,7 +927,7 @@ function renderReport() {
     // Close previous week subtotal if week or month changes
     if ((weekChanged || monthChanged) && weekTrips.length > 0) {
       const ws = calcSubtotals(weekTrips);
-      tableRows += renderSubtotalRow(`  Uge ${currentWeek.split('-W')[1]}`, ws, '#f0f4ff');
+      tableRows += renderSubtotalRow(`Uge ${currentWeek.split('-W')[1]} i alt`, ws, '#e8f0fe');
       weekTrips = [];
     }
 
@@ -934,7 +935,7 @@ function renderReport() {
     if (monthChanged && monthTrips.length > 0) {
       const ms = calcSubtotals(monthTrips);
       const mParts = currentMonth.split('-');
-      tableRows += renderSubtotalRow(`📅 ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]}`, ms, '#dbeafe');
+      tableRows += renderSubtotalRow(`📅 ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]} i alt`, ms, '#dbeafe');
       monthTrips = [];
     }
 
@@ -942,12 +943,18 @@ function renderReport() {
     if (monthChanged) {
       currentMonth = month;
       const mParts = month.split('-');
-      tableRows += `<tr><td colspan="12" style="padding:10px 6px 4px;font-weight:bold;font-size:13px;color:#1e3a5f;background:#fff;border-bottom:2px solid #2563eb">
+      tableRows += `<tr><td colspan="12" style="padding:10px 6px 4px;font-weight:bold;font-size:14px;color:#1e3a5f;background:#fff;border-bottom:2px solid #2563eb">
         ${dkMonths[mParts[1]] || mParts[1]} ${mParts[0]}
       </td></tr>`;
     }
 
-    if (weekChanged) currentWeek = week;
+    // New week header
+    if (weekChanged || monthChanged) {
+      currentWeek = week;
+      tableRows += `<tr style="background:#f8faff"><td colspan="12" style="padding:5px 6px;font-size:11px;font-weight:600;color:#3b82f6;border-bottom:1px solid #dbeafe">
+        📅 Uge ${weekNum}
+      </td></tr>`;
+    }
 
     monthTrips.push(t);
     weekTrips.push(t);
@@ -973,7 +980,7 @@ function renderReport() {
   // Close last week and month
   if (weekTrips.length > 0) {
     const ws = calcSubtotals(weekTrips);
-    tableRows += renderSubtotalRow(`  Uge ${currentWeek.split('-W')[1]}`, ws, '#f0f4ff');
+    tableRows += renderSubtotalRow(`Uge ${currentWeek.split('-W')[1]} i alt`, ws, '#e8f0fe');
   }
   if (monthTrips.length > 0) {
     const ms = calcSubtotals(monthTrips);
