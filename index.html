@@ -134,7 +134,7 @@ const CONFIG = {
   SCOPES: 'https://www.googleapis.com/auth/spreadsheets',
   ROUTES_SHEET: 'Rutedata Reklameomdeling',
   TRIPS_SHEET: 'Kørsler',
-  VERSION: '5.4',
+  VERSION: '5.6',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1362,13 +1362,8 @@ async function recalcAll() {
   showMsg(`⏳ Genberegner 0/${total} kørsler...`, 'success');
 
   for (const trip of state.trips) {
-    // Update route master data
-    trip.routes.forEach(r => {
-      const master = findRoute(r);
-      if (master) {
-        Object.assign(r, { km: master.km, husstande: master.husstande, tid: master.tid, tidMin: master.tidMin });
-      }
-    });
+    // Only recalculate transport distances via Routes API - do NOT touch route master data
+    // (husstande, km, tid, adresser stays as recorded on the original trip)
 
     // Calculate km from home to first route
     const firstStart = getStartAddress(trip.routes[0]);
@@ -1482,20 +1477,163 @@ async function importBackup() {
   }
 }
 
-async function generateSkatPDF() {
-  const filtered = getFilteredTrips().filter(t => (t.totalRouteKm + t.totalTransportKm) > 24);
-  if (filtered.length === 0) { showMsg('Ingen dage med over 24 km', 'error'); return; }
-  
-  const data = JSON.stringify({ trips: filtered, period: state.statsPeriod });
-  
-  // Copy to clipboard for use in Claude chat
-  try {
-    await navigator.clipboard.writeText(data);
-    showMsg(`✅ ${filtered.length} dage kopieret! Indsæt i Claude-chat med "Lav Skat PDF"`, 'success');
-  } catch {
-    // Fallback: show in prompt
-    prompt('Kopiér denne data og indsæt i Claude-chat:', data);
+function generateSkatPDF() {
+  const filtered = getFilteredTrips().sort((a,b) => a.date.localeCompare(b.date));
+  if (filtered.length === 0) { showMsg('Ingen kørsler i valgt periode', 'error'); return; }
+
+  const periodLabel = {
+    ytd: `År til dato ${new Date().getFullYear()}`,
+    lastYear: `${new Date().getFullYear()-1}`,
+    thisMonth: 'Denne måned',
+    lastMonth: 'Sidste måned',
+    custom: `${state.statsFrom} til ${state.statsTo}`
+  }[state.statsPeriod] || '';
+
+  const dkMonths = {'01':'Januar','02':'Februar','03':'Marts','04':'April','05':'Maj','06':'Juni','07':'Juli','08':'August','09':'September','10':'Oktober','11':'November','12':'December'};
+  const fmtN = v => (v||0).toFixed(1).replace('.',',');
+  const fmtKr = v => (v||0).toFixed(2).replace('.',',') + ' kr';
+  const fmtD = d => { try { const dt=new Date(d+'T00:00:00'); return `${dt.getDate()}/${dt.getMonth()+1}-${dt.getFullYear()}`; } catch { return d; } };
+
+  // Skat 2026 rates
+  const GRÆNSE = 24;       // første 24 km ingen fradrag
+  const SAT1 = 2.23;       // kr/km for km 25-120
+  const SAT2 = 1.12;       // kr/km for km over 120
+  const GRÆNSE2 = 120;
+
+  const calcFradrag = (totalKm) => {
+    const fradragsKm = Math.max(0, totalKm - GRÆNSE);
+    const sats1Km = Math.min(fradragsKm, GRÆNSE2 - GRÆNSE);
+    const sats2Km = Math.max(0, fradragsKm - (GRÆNSE2 - GRÆNSE));
+    const fradrag = sats1Km * SAT1 + sats2Km * SAT2;
+    return { fradragsKm, fradrag };
+  };
+
+  // Build table rows grouped by month
+  let rows = '';
+  let currentMonth = '';
+  let monthTrips = [];
+  let grandTotal = { km: 0, transport: 0, husstande: 0, fradragsKm: 0, fradrag: 0 };
+
+  const flushMonth = () => {
+    if (!monthTrips.length) return;
+    const mKm = monthTrips.reduce((s,t)=>s+t.totalRouteKm,0);
+    const mTr = monthTrips.reduce((s,t)=>s+t.totalTransportKm,0);
+    const mHus = monthTrips.reduce((s,t)=>s+t.totalHusstande,0);
+    const mFr = monthTrips.reduce((s,t)=>s+calcFradrag(t.totalRouteKm+t.totalTransportKm).fradragsKm,0);
+    const mFradrag = monthTrips.reduce((s,t)=>s+calcFradrag(t.totalRouteKm+t.totalTransportKm).fradrag,0);
+    const mParts = currentMonth.split('-');
+    rows += `<tr class="month-total">
+      <td colspan="3"><strong>📅 ${dkMonths[mParts[1]]||mParts[1]} ${mParts[0]} — ${monthTrips.length} kørsler</strong></td>
+      <td>${mHus}</td><td>${fmtN(mKm)}</td><td>${fmtN(mTr)}</td><td>${fmtN(mKm+mTr)}</td>
+      <td>${fmtN(mFr)}</td><td>${fmtKr(mFradrag)}</td>
+    </tr>`;
+    grandTotal.km += mKm; grandTotal.transport += mTr; grandTotal.husstande += mHus;
+    grandTotal.fradragsKm += mFr; grandTotal.fradrag += mFradrag;
+    monthTrips = [];
+  };
+
+  for (const t of filtered) {
+    const month = t.date.substring(0,7);
+    if (month !== currentMonth) {
+      flushMonth();
+      currentMonth = month;
+      const mParts = month.split('-');
+      rows += `<tr class="month-header"><td colspan="9">${dkMonths[mParts[1]]||mParts[1]} ${mParts[0]}</td></tr>`;
+    }
+    monthTrips.push(t);
+    const totalKm = t.totalRouteKm + t.totalTransportKm;
+    const { fradragsKm, fradrag } = calcFradrag(totalKm);
+    rows += `<tr>
+      <td>${fmtD(t.date)}</td>
+      <td>${t.routes.length}</td>
+      <td style="font-size:10px">${t.routes.map(r=>r.postnr+'-'+r.rutenr).join(', ')}</td>
+      <td>${t.totalHusstande}</td>
+      <td>${fmtN(t.totalRouteKm)}</td>
+      <td>${fmtN(t.totalTransportKm)}</td>
+      <td>${fmtN(totalKm)}</td>
+      <td>${fradragsKm > 0 ? fmtN(fradragsKm) : '-'}</td>
+      <td>${fradrag > 0 ? fmtKr(fradrag) : '-'}</td>
+    </tr>`;
   }
+  flushMonth();
+
+  const html = `<!DOCTYPE html>
+<html lang="da"><head>
+<meta charset="UTF-8">
+<title>Kørselsregnskab ${periodLabel}</title>
+<style>
+  @page { size: A4 landscape; margin: 15mm 12mm; }
+  body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 11px; margin-bottom: 8px; }
+  .rates { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px; font-size: 10px; color: #0369a1; margin-bottom: 16px; }
+  .summary { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .summary-box { border: 1px solid #ccc; border-radius: 6px; padding: 8px 14px; text-align: center; min-width: 90px; }
+  .summary-box .val { font-size: 16px; font-weight: bold; color: #1e3a5f; }
+  .summary-box .val.green { color: #16a34a; }
+  .summary-box .lbl { font-size: 9px; color: #666; }
+  table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  th { background: #1e293b; color: #fff; padding: 5px 4px; text-align: left; white-space: nowrap; }
+  th:nth-child(n+4) { text-align: right; }
+  td { padding: 3px 4px; border-bottom: 1px solid #e5e7eb; }
+  td:nth-child(n+4) { text-align: right; }
+  tr:nth-child(even) { background: #f9fafb; }
+  tr.month-header td { background: #fff; font-weight: bold; font-size: 11px; color: #1e3a5f; padding: 8px 4px 2px; border-bottom: 2px solid #2563eb; }
+  tr.month-total td { background: #dbeafe; font-weight: bold; border-top: 1px solid #93c5fd; }
+  tr.grand-total td { background: #1e3a5f; color: #fff; font-weight: bold; font-size: 10px; }
+  td.fradrag { color: #16a34a; font-weight: bold; }
+  .no-print { display: none; }
+  @media screen {
+    body { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .no-print { display: block; margin-bottom: 16px; }
+    .print-btn { background: #2563eb; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold; margin-right: 8px; }
+    .close-btn { background: #64748b; color: #fff; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  }
+</style>
+</head><body>
+<div class="no-print">
+  <button class="print-btn" onclick="window.print()">🖨️ Gem som PDF / Print</button>
+  <button class="close-btn" onclick="window.close()">✕ Luk</button>
+</div>
+<h1>Kørselsregnskab — Skat</h1>
+<div class="meta">Periode: ${periodLabel} &nbsp;·&nbsp; Udskrevet: ${new Date().toLocaleDateString('da-DK')} &nbsp;·&nbsp; Rutetracker v${CONFIG.VERSION}</div>
+<div class="rates">
+  ℹ️ <strong>Beregningsgrundlag 2026:</strong> Første 24 km pr. dag giver ikke fradrag &nbsp;·&nbsp; 
+  Km 25–120: ${SAT1.toFixed(2).replace('.',',')} kr/km &nbsp;·&nbsp; 
+  Over 120 km: ${SAT2.toFixed(2).replace('.',',')} kr/km
+</div>
+<div class="summary">
+  <div class="summary-box"><div class="val">${filtered.length}</div><div class="lbl">Kørsler</div></div>
+  <div class="summary-box"><div class="val">${fmtN(grandTotal.km)}</div><div class="lbl">Rute-km</div></div>
+  <div class="summary-box"><div class="val">${fmtN(grandTotal.transport)}</div><div class="lbl">Transport-km</div></div>
+  <div class="summary-box"><div class="val">${fmtN(grandTotal.km+grandTotal.transport)}</div><div class="lbl">Total km</div></div>
+  <div class="summary-box"><div class="val">${fmtN(grandTotal.fradragsKm)}</div><div class="lbl">Fradragsber. km</div></div>
+  <div class="summary-box"><div class="val green">${fmtKr(grandTotal.fradrag)}</div><div class="lbl">Samlet fradrag</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Dato</th><th>Ant.</th><th>Rutenumre</th><th>Husstande</th>
+    <th>Rute-km</th><th>Transport-km</th><th>Total km</th>
+    <th>Fradr. km</th><th>Fradrag</th>
+  </tr></thead>
+  <tbody>${rows}
+  <tr class="grand-total">
+    <td colspan="3">🏁 TOTAL PERIODE — ${filtered.length} kørsler</td>
+    <td>${grandTotal.husstande}</td>
+    <td>${fmtN(grandTotal.km)}</td>
+    <td>${fmtN(grandTotal.transport)}</td>
+    <td>${fmtN(grandTotal.km+grandTotal.transport)}</td>
+    <td>${fmtN(grandTotal.fradragsKm)}</td>
+    <td>${fmtKr(grandTotal.fradrag)}</td>
+  </tr>
+  </tbody>
+</table>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { showMsg('⚠️ Tillad popups for at åbne PDF', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 function attachEvents() {
