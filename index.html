@@ -229,8 +229,9 @@ async function ensureTripsSheet() {
 async function loadRoutes() {
   try {
     let rows;
+    let sheetName = CONFIG.ROUTES_SHEET;
     try {
-      rows = await sheetsGet(`${CONFIG.ROUTES_SHEET}!A1:Z`);
+      rows = await sheetsGet(`${sheetName}!A1:Z`);
     } catch (e) {
       // Try fetching sheet names and use the first one
       const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}?key=${CONFIG.API_KEY}&fields=sheets.properties.title`;
@@ -239,13 +240,17 @@ async function loadRoutes() {
       if (meta.sheets && meta.sheets.length > 0) {
         const firstName = meta.sheets[0].properties.title;
         showMsg(`Prøver ark: "${firstName}"`, 'success');
+        sheetName = firstName;
         rows = await sheetsGet(`${firstName}!A1:Z`);
       } else {
         throw new Error('Ingen ark fundet');
       }
     }
     if (!rows || rows.length < 2) { showMsg('Ingen rutedata fundet', 'error'); return; }
-    
+
+    state.routeSheetName = sheetName;
+    state.routeSheetHeaders = rows[0];
+
     const headers = rows[0].map(h => h.toLowerCase().replace(/[\s.()]/g, ''));
     const colIdx = {};
     headers.forEach((h, i) => {
@@ -254,8 +259,9 @@ async function loadRoutes() {
       if (h === 'postnummer') colIdx['postnr'] = i;
       if (h === 'rutenr') colIdx['rutenr'] = i;
     });
-    
-    state.routes = rows.slice(1).filter(r => r.length > 1 && r[colIdx['postnr']]).map(row => {
+    state.routeColIdx = colIdx;
+
+    state.routes = rows.slice(1).map((row, i) => ({ row, sheetRow: i + 2 })).filter(x => x.row.length > 1 && x.row[colIdx['postnr']]).map(({row, sheetRow}) => {
       const get = (key) => row[colIdx[key]] || '';
       const postnr = (get('postnr') || get('postnummer')).toString().trim();
       const rutenr = get('rutenr').toString().trim();
@@ -271,6 +277,7 @@ async function loadRoutes() {
 
       return {
         id: `${postnr}-${rutenr}`,
+        sheetRow,
         postnr, rutenr, by,
         startAdresse: get('startadresse'),
         slutAdresse: get('slutadresse'),
@@ -280,7 +287,7 @@ async function loadRoutes() {
         type: isDepot ? 'depot' : 'rute',
       };
     }).sort((a, b) => a.id.localeCompare(b.id));
-    
+
     showMsg(`✅ ${state.routes.length} ruter indlæst`, 'success');
   } catch (e) {
     console.error('Route load error:', e);
@@ -342,6 +349,102 @@ async function saveAllTrips() {
     }
   } catch (e) {
     showMsg('❌ Gemme-fejl: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ROUTES SHEET WRITE-BACK (manuelt oprettede/redigerede ruter)
+// ═══════════════════════════════════════════════════════════
+function colLetter(idx) {
+  let s = '';
+  idx = idx + 1;
+  while (idx > 0) {
+    const rem = (idx - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    idx = Math.floor((idx - 1) / 26);
+  }
+  return s;
+}
+
+function firstColIdx(keys) {
+  if (!state.routeColIdx) return -1;
+  for (const k of keys) {
+    if (state.routeColIdx[k] !== undefined) return state.routeColIdx[k];
+  }
+  return -1;
+}
+
+// Bygger en fuld række (array) til Sheets ud fra en rute, matchet mod de faktiske kolonneoverskrifter
+function buildRouteRow(route) {
+  const headers = state.routeSheetHeaders || [];
+  const rowArr = new Array(headers.length).fill('');
+
+  const set = (keys, value) => {
+    const idx = firstColIdx(keys);
+    if (idx >= 0) rowArr[idx] = value;
+  };
+
+  set(['postnr', 'postnummer'], route.postnr);
+  set(['rutenr'], route.rutenr);
+  if (route.type === 'depot') set(['byellerland', 'by'], 'Depot');
+  else if (route.by) set(['byellerland', 'by'], route.by);
+  set(['startadresse'], route.startAdresse || '');
+  set(['slutadresse'], route.slutAdresse || '');
+  set(['antalhusstande', 'husstande'], route.husstande || 0);
+  set(['antalaviser'], route.aviser || 0);
+  // Km: skriv til meter-kolonne hvis den findes, ellers km-kolonne
+  if (firstColIdx(['rutelængdemeter']) >= 0) {
+    set(['rutelængdemeter'], Math.round((route.km || 0) * 1000));
+  } else {
+    set(['km'], route.km || 0);
+  }
+  set(['omdelingstidmin', 'tid'], route.tidMin || 0);
+  set(['htfakm'], route.htfaKm || 0);
+  set(['sathkm'], route.sathKm || 0);
+
+  return rowArr;
+}
+
+async function appendRouteToSheet(route) {
+  if (!state.authed) { showMsg('⚠️ Log ind for at gemme ruten i Google Sheet', 'error'); return false; }
+  if (!state.routeSheetHeaders) { showMsg('⚠️ Kunne ikke finde arkets kolonner — genindlæs ruter først', 'error'); return false; }
+  try {
+    const row = buildRouteRow(route);
+    await sheetsAppend(`${state.routeSheetName || CONFIG.ROUTES_SHEET}!A1`, [row]);
+    await loadRoutes(); // genindlæs så sheetRow-numre bliver korrekte
+    return true;
+  } catch (e) {
+    showMsg('❌ Kunne ikke gemme ruten i Sheet: ' + e.message, 'error');
+    return false;
+  }
+}
+
+async function updateRouteFieldInSheet(route, field) {
+  if (!state.authed) { showMsg('⚠️ Log ind for at gemme ændringen i Google Sheet', 'error'); return; }
+  if (!route.sheetRow) { showMsg('⚠️ Ruten findes ikke i Sheetet endnu', 'error'); return; }
+
+  const fieldMap = {
+    husstande: () => { const idx = firstColIdx(['antalhusstande','husstande']); return idx >= 0 ? { idx, val: route.husstande || 0 } : null; },
+    km: () => {
+      const meterIdx = firstColIdx(['rutelængdemeter']);
+      if (meterIdx >= 0) return { idx: meterIdx, val: Math.round((route.km || 0) * 1000) };
+      const kmIdx = firstColIdx(['km']);
+      return kmIdx >= 0 ? { idx: kmIdx, val: route.km || 0 } : null;
+    },
+    htfaKm: () => { const idx = firstColIdx(['htfakm']); return idx >= 0 ? { idx, val: route.htfaKm || 0 } : null; },
+    sathKm: () => { const idx = firstColIdx(['sathkm']); return idx >= 0 ? { idx, val: route.sathKm || 0 } : null; },
+  };
+
+  const resolver = fieldMap[field];
+  const target = resolver ? resolver() : null;
+  if (!target) { showMsg('⚠️ Denne kolonne findes ikke i Sheetet', 'error'); return; }
+
+  try {
+    const col = colLetter(target.idx);
+    await sheetsUpdate(`${state.routeSheetName || CONFIG.ROUTES_SHEET}!${col}${route.sheetRow}`, [[target.val]]);
+    showMsg('✅ Gemt i Google Sheet', 'success');
+  } catch (e) {
+    showMsg('❌ Kunne ikke opdatere Sheet: ' + e.message, 'error');
   }
 }
 
@@ -834,6 +937,7 @@ function renderRouteEdit(r) {
       <div><span class="label">HTFA km</span><input class="input input-sm" value="${r.htfaKm||''}" placeholder="Fra hjem" onblur="updateRoute('${r.id}','htfaKm',parseFloat(this.value.replace(',','.'))||0)"></div>
       <div><span class="label">SATH km</span><input class="input input-sm" value="${r.sathKm||''}" placeholder="Til hjem" onblur="updateRoute('${r.id}','sathKm',parseFloat(this.value.replace(',','.'))||0)"></div>
     </div>
+    <p style="color:var(--text3);font-size:0.7rem">💾 Gemmes automatisk i Google Sheet ved forlad felt</p>
   </div>`;
 }
 
@@ -856,6 +960,7 @@ function renderAddRoute() {
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--text2);font-size:0.85rem">
       <input type="checkbox" ${nr.isDepot?'checked':''} onchange="state.newRoute.isDepot=this.checked"> 🏢 Depot-rute
     </label>
+    ${!state.authed ? '<p style="color:var(--yellow);font-size:0.75rem;margin-bottom:8px">⚠️ Log ind for at gemme ruten i Google Sheet</p>' : ''}
     <button class="btn btn-green btn-sm" onclick="createRoute()">✅ Opret rute</button>
   </div>`;
 }
@@ -1414,26 +1519,38 @@ function updateRoute(id, field, value) {
   const r = state.routes.find(x => x.id === id);
   if (r) { r[field] = value; }
   render();
+  updateRouteFieldInSheet(r, field);
 }
 
-function createRoute() {
+async function createRoute() {
   const nr = state.newRoute;
   if (!nr.postnr || !nr.rutenr) { showMsg('❌ Postnr og Rutenr er påkrævet', 'error'); return; }
   const id = `${nr.postnr}-${nr.rutenr}`;
   if (state.routes.find(r => r.id === id)) { showMsg(`❌ ${id} findes allerede`, 'error'); return; }
   const km = parseFloat((nr.km||'0').replace(',','.'))||0;
   const tidMin = parseInt(nr.tid||'0')||0;
-  state.routes.push({
+  const newRoute = {
     id, postnr: nr.postnr, rutenr: nr.rutenr, by: '',
     startAdresse: '', slutAdresse: '',
     husstande: parseInt(nr.husstande||'0')||0, km, tid: tidMin>0?`${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}`:'', tidMin,
     htfaKm: parseFloat((nr.htfaKm||'0').replace(',','.'))||0,
     sathKm: parseFloat((nr.sathKm||'0').replace(',','.'))||0,
     type: nr.isDepot?'depot':'rute', aviser: 0,
-  });
-  state.routes.sort((a,b) => a.id.localeCompare(b.id));
+  };
+
+  state.loading = true;
+  render();
+  const ok = await appendRouteToSheet(newRoute);
+  state.loading = false;
+
+  if (!ok) {
+    // Faldback: behold i lokal state selvom Sheet-skrivning fejlede, så data ikke går tabt
+    state.routes.push(newRoute);
+    state.routes.sort((a,b) => a.id.localeCompare(b.id));
+  }
+
   state.newRoute = { postnr:'',rutenr:'',by:'',startAdresse:'',slutAdresse:'',husstande:'',km:'',tid:'',htfaKm:'',sathKm:'',isDepot:false };
-  showMsg(`✅ ${id} oprettet!`, 'success');
+  showMsg(ok ? `✅ ${id} oprettet og gemt i Google Sheet!` : `⚠️ ${id} oprettet lokalt, men kunne ikke gemmes i Sheet`, ok ? 'success' : 'error');
   render();
 }
 
