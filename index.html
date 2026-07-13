@@ -1557,7 +1557,14 @@ async function createRoute() {
 
   state.loading = true;
   render();
-  const ok = await appendRouteToSheet(newRoute);
+
+  let ok = false;
+  try {
+    ok = await appendRouteToSheet(newRoute);
+  } catch (e) {
+    console.error('createRoute error:', e);
+    showMsg('❌ Uventet fejl ved oprettelse: ' + e.message, 'error');
+  }
   state.loading = false;
 
   if (!ok) {
@@ -1773,6 +1780,19 @@ function generateSkatPDF() {
 function attachEvents() {
   // Events are attached inline via onclick/oninput
 }
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL ERROR SAFETY NET — sørger for at ingen fejl fejler stille
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('error', (e) => {
+  console.error('Uncaught error:', e.error || e.message);
+  try { showMsg('❌ Uventet fejl: ' + (e.message || 'ukendt'), 'error'); } catch {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled promise rejection:', e.reason);
+  try { showMsg('❌ Uventet fejl: ' + (e.reason?.message || e.reason || 'ukendt'), 'error'); } catch {}
+});
+console.log('Rutetracker v' + CONFIG.VERSION + ' indlæst — build ' + new Date().toISOString());
 
 // ═══════════════════════════════════════════════════════════
 // INIT
