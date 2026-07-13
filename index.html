@@ -948,6 +948,10 @@ function renderAddRoute() {
       <div><span class="label">Postnr. *</span><input class="input input-sm" value="${nr.postnr}" oninput="state.newRoute.postnr=this.value" placeholder="4793"></div>
       <div><span class="label">Rutenr. *</span><input class="input input-sm" value="${nr.rutenr}" oninput="state.newRoute.rutenr=this.value" placeholder="Bogø depot"></div>
     </div>
+    <div class="grid-2" style="margin-bottom:8px">
+      <div><span class="label">Startadresse</span><input class="input input-sm" value="${nr.startAdresse}" oninput="state.newRoute.startAdresse=this.value" placeholder="Adresse"></div>
+      <div><span class="label">Slutadresse</span><input class="input input-sm" value="${nr.slutAdresse}" oninput="state.newRoute.slutAdresse=this.value" placeholder="Adresse"></div>
+    </div>
     <div class="grid-3" style="margin-bottom:8px">
       <div><span class="label">Husstande</span><input class="input input-sm" value="${nr.husstande}" oninput="state.newRoute.husstande=this.value" type="number"></div>
       <div><span class="label">Km</span><input class="input input-sm" value="${nr.km}" oninput="state.newRoute.km=this.value" placeholder="8,5"></div>
@@ -1531,7 +1535,7 @@ async function createRoute() {
   const tidMin = parseInt(nr.tid||'0')||0;
   const newRoute = {
     id, postnr: nr.postnr, rutenr: nr.rutenr, by: '',
-    startAdresse: '', slutAdresse: '',
+    startAdresse: nr.startAdresse || '', slutAdresse: nr.slutAdresse || '',
     husstande: parseInt(nr.husstande||'0')||0, km, tid: tidMin>0?`${Math.floor(tidMin/60)}:${String(tidMin%60).padStart(2,'0')}`:'', tidMin,
     htfaKm: parseFloat((nr.htfaKm||'0').replace(',','.'))||0,
     sathKm: parseFloat((nr.sathKm||'0').replace(',','.'))||0,
