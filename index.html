@@ -965,6 +965,9 @@ function renderAddRoute() {
       <div><span class="label">Startadresse</span><input class="input input-sm" value="${nr.startAdresse}" oninput="state.newRoute.startAdresse=this.value" placeholder="Adresse"></div>
       <div><span class="label">Slutadresse</span><input class="input input-sm" value="${nr.slutAdresse}" oninput="state.newRoute.slutAdresse=this.value" placeholder="Adresse"></div>
     </div>
+    <button class="btn btn-blue btn-sm" style="margin-bottom:8px" onclick="calcNewRouteDistances()" ${state.calcNewRouteDist?'disabled':''}>
+      ${state.calcNewRouteDist ? '⏳ Beregner...' : '📍 Beregn HTFA/SATH fra adresser'}
+    </button>
     <div class="grid-3" style="margin-bottom:8px">
       <div><span class="label">Husstande</span><input class="input input-sm" value="${nr.husstande}" oninput="state.newRoute.husstande=this.value" type="number"></div>
       <div><span class="label">Km</span><input class="input input-sm" value="${nr.km}" oninput="state.newRoute.km=this.value" placeholder="8,5"></div>
@@ -1537,6 +1540,35 @@ function updateRoute(id, field, value) {
   if (r) { r[field] = value; }
   render();
   updateRouteFieldInSheet(r, field);
+}
+
+async function calcNewRouteDistances() {
+  const nr = state.newRoute;
+  if (!nr.startAdresse && !nr.slutAdresse) {
+    showMsg('⚠️ Indtast mindst en adresse først', 'error');
+    return;
+  }
+  state.calcNewRouteDist = true;
+  render();
+
+  const start = nr.startAdresse || nr.slutAdresse;
+  const slut = nr.slutAdresse || nr.startAdresse;
+
+  try {
+    const [htfa, sath] = await Promise.all([
+      getRouteDistance(homeAddress, start),
+      getRouteDistance(slut, homeAddress),
+    ]);
+    if (htfa) state.newRoute.htfaKm = String(htfa.km).replace('.', ',');
+    if (sath) state.newRoute.sathKm = String(sath.km).replace('.', ',');
+    if (htfa || sath) showMsg('✅ HTFA/SATH beregnet — ret til hvis nødvendigt', 'success');
+    else showMsg('⚠️ Kunne ikke beregne km — tjek adresserne', 'error');
+  } catch (e) {
+    showMsg('❌ Fejl ved beregning: ' + e.message, 'error');
+  }
+
+  state.calcNewRouteDist = false;
+  render();
 }
 
 async function createRoute() {
