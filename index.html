@@ -185,7 +185,11 @@ async function sheetsUpdate(range, values) {
     headers: { 'Authorization': `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ range, values }),
   });
-  if (!res.ok) throw new Error(`Sheets PUT error: ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j.error?.message || ''; } catch {}
+    throw new Error(`Sheets PUT error ${res.status}${detail ? ': ' + detail : ''}`);
+  }
   return res.json();
 }
 
@@ -196,7 +200,11 @@ async function sheetsAppend(range, values) {
     headers: { 'Authorization': `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ range, values }),
   });
-  if (!res.ok) throw new Error(`Sheets APPEND error: ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j.error?.message || ''; } catch {}
+    throw new Error(`Sheets APPEND error ${res.status}${detail ? ': ' + detail : ''}`);
+  }
   return res.json();
 }
 
@@ -512,7 +520,9 @@ function fmtDate(d) {
 function showMsg(text, type='success') {
   state.msg = { text, type };
   render();
-  setTimeout(() => { state.msg = null; render(); }, 4000);
+  if (type !== 'error') {
+    setTimeout(() => { if (state.msg && state.msg.text === text) { state.msg = null; render(); } }, 4000);
+  }
 }
 
 function getFilteredTrips() {
@@ -568,7 +578,10 @@ function render() {
     ${renderHeader()}
     ${renderNav()}
     <div class="container" style="padding-top:12px">
-      ${state.msg ? `<div class="msg msg-${state.msg.type}">${state.msg.text}</div>` : ''}
+      ${state.msg ? `<div class="msg msg-${state.msg.type}" style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <span>${state.msg.text}</span>
+        ${state.msg.type==='error' ? `<button onclick="state.msg=null;render()" style="background:none;color:inherit;padding:0 4px;font-weight:bold">✕</button>` : ''}
+      </div>` : ''}
       ${state.loading ? '<div class="loading"><div class="spinner"></div>Indlæser...</div>' : ''}
       ${state.view === 'new' ? renderNewTrip() : ''}
       ${state.view === 'history' ? renderHistory() : ''}
